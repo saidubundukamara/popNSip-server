@@ -14,6 +14,7 @@ import { PaymentRepository } from '@/repositories/payment.repository';
 import { StaffUserRepository } from '@/repositories/staff_user.repository';
 import { WebhookEventRepository } from '@/repositories/webhook_event.repository';
 import { WhatsAppConversationRepository } from '@/repositories/wa_conversation.repository';
+import { WhatsAppMessageRepository } from '@/repositories/wa_message.repository';
 
 /**
  * Composition root. Each repository is instantiated once against the shared
@@ -31,6 +32,7 @@ export const repositories = {
   branches: new BranchRepository(prisma),
   categories: new CategoryRepository(prisma),
   conversations: new WhatsAppConversationRepository(prisma),
+  waMessages: new WhatsAppMessageRepository(prisma),
   customers: new CustomerRepository(prisma),
   itemVariants: new ItemVariantRepository(prisma),
   menuItems: new MenuItemRepository(prisma),

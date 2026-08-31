@@ -5,6 +5,7 @@ import { ForbiddenError, IllegalTransitionError, NotFoundError, ValidationError 
 import { logger } from '@/lib/logger';
 import { repositories as repos } from '@/repositories';
 import { emit } from '@/services/sse_service';
+import { notifyOrderStatus } from '@/services/wa_notification_service';
 import type { TxClient } from '@/repositories/base.repository';
 
 /**
@@ -222,7 +223,19 @@ export async function transition(input: {
     },
   });
 
-  // Phase 7 attaches the WhatsApp queue here.
+  // Queued, not sent (FR-WA-8): the order has already moved, and a slow or
+  // failed WhatsApp send must not undo that or make the caller wait for it.
+  await notifyOrderStatus({
+    id: result.order.id,
+    reference: result.order.reference,
+    status: to,
+    type: result.order.type,
+    trackingToken: result.order.trackingToken,
+    customerId: result.order.customerId,
+  }).catch((error: unknown) => {
+    logger.error({ err: error, orderId }, 'Could not queue the customer notification');
+  });
+
   logger.info({ orderId, from: result.from, to, actorType: actor.type }, 'Order status changed');
 
   return result;

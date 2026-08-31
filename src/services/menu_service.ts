@@ -1,6 +1,7 @@
 import { prisma } from '@/db/client';
 import { ConflictError, NotFoundError, ValidationError } from '@/lib/errors';
 import { repositories as repos } from '@/repositories';
+import { queueItemSync } from '@/services/catalog_sync_service';
 import { deleteMenuImage } from '@/services/media_service';
 
 /**
@@ -103,7 +104,11 @@ export async function createItem(input: MenuItemInput) {
   if (!category || category.archivedAt) throw new NotFoundError('Category not found.');
 
   const count = await repos.menuItems.count({ categoryId: input.categoryId, archivedAt: null });
-  return repos.menuItems.create({ ...input, sortOrder: count });
+  const created = await repos.menuItems.create({ ...input, sortOrder: count });
+
+  // Queued, never awaited: a menu edit must not wait on Whapi's latency.
+  queueItemSync(created.id);
+  return created;
 }
 
 export async function updateItem(id: string, input: Partial<MenuItemInput>) {
@@ -115,21 +120,31 @@ export async function updateItem(id: string, input: Partial<MenuItemInput>) {
     if (!category || category.archivedAt) throw new NotFoundError('Category not found.');
   }
 
-  return { before, after: await repos.menuItems.update(id, input) };
+  const after = await repos.menuItems.update(id, input);
+  queueItemSync(id);
+  return { before, after };
 }
 
 /** FR-MENU-5. Separated from updateItem because it is the one-tap action. */
 export async function setItemAvailability(id: string, isAvailable: boolean) {
   const before = await repos.menuItems.findById(id);
   if (!before) throw new NotFoundError('Item not found.');
-  return { before, after: await repos.menuItems.update(id, { isAvailable }) };
+
+  const after = await repos.menuItems.update(id, { isAvailable });
+  // The catalog learns about a sold-out item as 'out of stock', not a
+  // deletion, so the product id survives for when it comes back.
+  queueItemSync(id);
+  return { before, after };
 }
 
 export async function archiveItem(id: string) {
   const before = await repos.menuItems.findById(id);
   if (!before) throw new NotFoundError('Item not found.');
   if (before.archivedAt) return { before, after: before };
-  return { before, after: await repos.menuItems.update(id, { archivedAt: now(), isAvailable: false }) };
+
+  const after = await repos.menuItems.update(id, { archivedAt: now(), isAvailable: false });
+  queueItemSync(id);
+  return { before, after };
 }
 
 export async function deleteItem(id: string) {
@@ -174,6 +189,7 @@ export async function setItemImage(id: string, image: { url: string; publicId: s
   if (!before) throw new NotFoundError('Item not found.');
 
   const after = await repos.menuItems.update(id, { imageUrl: image.url, imagePublicId: image.publicId });
+  queueItemSync(id);
 
   // Replace, then remove the old asset — never the reverse, or a failed
   // upload leaves the item with no image at all.
