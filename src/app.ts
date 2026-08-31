@@ -4,15 +4,17 @@ import express, { type Express } from 'express';
 import helmet from 'helmet';
 
 import { env, isProduction } from '@/config/env';
+import { configurePassport, passport } from '@/config/passport';
+import { sessionMiddleware } from '@/config/session';
 import { errorHandler, notFoundHandler } from '@/middleware/error_handler';
 import { requestId } from '@/middleware/request_id';
 import { routes } from '@/routes';
 
 /**
- * Middleware order is load-bearing. Read it top to bottom:
- * correlation id first (everything downstream logs with it), then security
- * headers, then CORS, then body parsing, then routes, then the terminal
- * error handler.
+ * Middleware order is load-bearing. Read it top to bottom: correlation id
+ * first (everything downstream logs with it), then security headers, then
+ * CORS, then body parsing, then the session and passport, then routes, then
+ * the terminal error handler.
  */
 export function createApp(): Express {
   const app = express();
@@ -36,6 +38,13 @@ export function createApp(): Express {
   app.use(express.json({ limit: '1mb' }));
   app.use(express.urlencoded({ extended: true }));
   app.use(cookieParser());
+
+  // Sessions live in Postgres, so signing out or deactivating an account takes
+  // effect on the next request rather than when a token happens to expire.
+  configurePassport();
+  app.use(sessionMiddleware);
+  app.use(passport.initialize());
+  app.use(passport.session());
 
   app.use(routes);
 
