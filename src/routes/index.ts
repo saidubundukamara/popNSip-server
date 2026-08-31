@@ -5,6 +5,7 @@ import { healthRouter } from '@/routes/health';
 import { publicMenuRouter } from '@/routes/public/menu';
 import { publicOrdersRouter } from '@/routes/public/orders';
 import { staffMenuRouter } from '@/routes/staff/menu';
+import { staffOrdersRouter } from '@/routes/staff/orders';
 import { staffUsersRouter } from '@/routes/staff/users';
 
 /**
@@ -20,4 +21,5 @@ routes.use(authRouter);
 routes.use(publicMenuRouter);
 routes.use(publicOrdersRouter);
 routes.use(staffMenuRouter);
+routes.use(staffOrdersRouter);
 routes.use(staffUsersRouter);
