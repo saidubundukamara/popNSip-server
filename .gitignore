@@ -19,3 +19,6 @@ npm-debug.log*
 .DS_Store
 *.pem
 /coverage
+
+# prisma client is generated, not committed
+/src/generated/
