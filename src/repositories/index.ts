@@ -3,8 +3,11 @@ import { AuditLogRepository } from '@/repositories/audit_log.repository';
 import { BranchRepository } from '@/repositories/branch.repository';
 import { CategoryRepository } from '@/repositories/category.repository';
 import { CustomerRepository } from '@/repositories/customer.repository';
+import { ItemVariantRepository } from '@/repositories/item_variant.repository';
 import { MenuItemRepository } from '@/repositories/menu_item.repository';
 import { OrderRepository } from '@/repositories/order.repository';
+import { ModifierRepository } from '@/repositories/modifier.repository';
+import { ModifierGroupRepository } from '@/repositories/modifier_group.repository';
 import { OrderStatusEventRepository } from '@/repositories/order_status_event.repository';
 import { PaymentRepository } from '@/repositories/payment.repository';
 import { StaffUserRepository } from '@/repositories/staff_user.repository';
@@ -28,7 +31,10 @@ export const repositories = {
   categories: new CategoryRepository(prisma),
   conversations: new WhatsAppConversationRepository(prisma),
   customers: new CustomerRepository(prisma),
+  itemVariants: new ItemVariantRepository(prisma),
   menuItems: new MenuItemRepository(prisma),
+  modifierGroups: new ModifierGroupRepository(prisma),
+  modifiers: new ModifierRepository(prisma),
   orders: new OrderRepository(prisma),
   payments: new PaymentRepository(prisma),
   staffUsers: new StaffUserRepository(prisma),

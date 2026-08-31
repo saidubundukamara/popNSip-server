@@ -19,7 +19,16 @@ export class CategoryRepository extends BaseRepository<PrismaClient['category'],
     });
   }
 
-  /** Reordering writes the whole list in one transaction (FR-MENU-4). */
+  /** FR-MENU-8: a category whose items appear on an order may not be deleted. */
+  countOrderReferences(id: string) {
+    return this.db.orderItem.count({ where: { menuItem: { categoryId: id } } });
+  }
+
+  countItems(id: string) {
+    return this.db.menuItem.count({ where: { categoryId: id, archivedAt: null } });
+  }
+
+  /** Reordering writes the whole list in one transaction (FR-MENU-1). */
   async reorder(ids: string[], tx: TxClient): Promise<void> {
     await Promise.all(
       ids.map((id, index) => tx.category.update({ where: { id }, data: { sortOrder: index } })),

@@ -30,6 +30,12 @@ export interface ModelDelegate<TSelect, TCreate, TUpdate, TWhere, TWhereUnique, 
 export type AnyModelDelegate = ModelDelegate<any, any, any, any, any, any>;
 
 /**
+ * The delegate's `where` type. Taken from findMany, whose argument is a single
+ * object type — count's is a union of overloads that no conditional survives.
+ */
+export type WhereOf<D extends AnyModelDelegate> = NonNullable<Parameters<D['findMany']>[0]>['where'];
+
+/**
  * All Prisma access lives in repositories. A repository returns plain data:
  * it never sends a WhatsApp message, never emits SSE, and never throws a
  * domain error — those belong to the service above it.
@@ -66,11 +72,11 @@ export abstract class BaseRepository<D extends AnyModelDelegate, TModel> {
     return this.model.update({ where: { id } as any, data } as any);
   }
 
-  count(where?: Parameters<D['count']>[0] extends { where?: infer W } ? W : never): Promise<number> {
+  count(where?: WhereOf<D>): Promise<number> {
     return this.model.count({ where } as any);
   }
 
-  async exists(where: Parameters<D['count']>[0] extends { where?: infer W } ? W : never): Promise<boolean> {
+  async exists(where: WhereOf<D>): Promise<boolean> {
     return (await this.model.count({ where } as any)) > 0;
   }
 }

@@ -12,12 +12,46 @@ export class MenuItemRepository extends BaseRepository<PrismaClient['menuItem'],
   }
 
   /**
-   * The public menu, in one query: active, unarchived, in sort order, with the
-   * variants and modifier groups the storefront needs to render an item sheet.
+   * The public menu, in one query: active, unarchived, available, in sort
+   * order, with the variants and modifier groups the storefront needs to
+   * render an item sheet.
+   *
+   * Unavailable rows are filtered out at every level, not greyed out —
+   * FR-MENU-5 says a sold-out item disappears from the storefront. Order
+   * validation blocks it a second time, for carts that went stale.
    */
   findPublicMenu(branchId: string) {
     return this.db.category.findMany({
       where: { branchId, isActive: true, archivedAt: null },
+      orderBy: { sortOrder: 'asc' },
+      include: {
+        items: {
+          where: { archivedAt: null, isAvailable: true },
+          orderBy: { sortOrder: 'asc' },
+          include: {
+            variants: {
+              where: { archivedAt: null, isAvailable: true },
+              orderBy: { sortOrder: 'asc' },
+            },
+            modifierGroups: {
+              orderBy: { sortOrder: 'asc' },
+              include: {
+                modifiers: {
+                  where: { archivedAt: null, isAvailable: true },
+                  orderBy: { sortOrder: 'asc' },
+                },
+              },
+            },
+          },
+        },
+      },
+    });
+  }
+
+  /** The manager's view: everything, including archived and unavailable rows. */
+  findManagedMenu(branchId: string) {
+    return this.db.category.findMany({
+      where: { branchId, archivedAt: null },
       orderBy: { sortOrder: 'asc' },
       include: {
         items: {
@@ -33,6 +67,26 @@ export class MenuItemRepository extends BaseRepository<PrismaClient['menuItem'],
         },
       },
     });
+  }
+
+  /** One item with everything the storefront sheet and the editor need. */
+  findDetailed(id: string) {
+    return this.delegate(this.db).findUnique({
+      where: { id },
+      include: {
+        category: true,
+        variants: { where: { archivedAt: null }, orderBy: { sortOrder: 'asc' } },
+        modifierGroups: {
+          orderBy: { sortOrder: 'asc' },
+          include: { modifiers: { where: { archivedAt: null }, orderBy: { sortOrder: 'asc' } } },
+        },
+      },
+    });
+  }
+
+  /** FR-MENU-8: an item an order references may be archived, never deleted. */
+  countOrderReferences(id: string) {
+    return this.db.orderItem.count({ where: { menuItemId: id } });
   }
 
   /** Everything pricing_service needs to price a cart line, loaded fresh. */
