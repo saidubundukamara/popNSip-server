@@ -36,4 +36,18 @@ export class WebhookEventRepository extends BaseRepository<PrismaClient['webhook
       data: { processedAt: new Date(), ...(error ? { error } : {}) },
     });
   }
+
+  /**
+   * Release a claim so the provider's retry is allowed to succeed.
+   *
+   * A handler that threw leaves a claimed row with no effect applied. Left
+   * claimed, every retry short-circuits on the unique constraint and the
+   * payment stays in limbo forever.
+   */
+  release(id: string, error: string) {
+    return this.delegate(this.db).update({
+      where: { id },
+      data: { processedAt: null, error },
+    });
+  }
 }

@@ -8,7 +8,9 @@ import { configurePassport, passport } from '@/config/passport';
 import { sessionMiddleware } from '@/config/session';
 import { errorHandler, notFoundHandler } from '@/middleware/error_handler';
 import { requestId } from '@/middleware/request_id';
+import { jobsRouter } from '@/routes/jobs';
 import { routes } from '@/routes';
+import { monimeWebhookRouter } from '@/routes/webhooks/monime';
 
 /**
  * Middleware order is load-bearing. Read it top to bottom: correlation id
@@ -32,8 +34,10 @@ export function createApp(): Express {
     }),
   );
 
-  // ── Webhook routers mount HERE, before express.json(), because signature
-  // verification runs against the raw body (Phase 6 / Phase 7).
+  // Webhooks mount HERE, ahead of express.json(): the signature is computed
+  // over the exact bytes the provider sent, and a re-serialised body will not
+  // match. Phase 7 adds the Whapi receiver alongside this one.
+  app.use(monimeWebhookRouter);
 
   app.use(express.json({ limit: '1mb' }));
   app.use(express.urlencoded({ extended: true }));
@@ -46,6 +50,7 @@ export function createApp(): Express {
   app.use(passport.initialize());
   app.use(passport.session());
 
+  app.use(jobsRouter);
   app.use(routes);
 
   app.use(notFoundHandler);
