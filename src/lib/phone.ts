@@ -61,6 +61,27 @@ export function isSierraLeoneMobile(input: string): boolean {
   }
 }
 
+/**
+ * The digits to match a stored E.164 against, for search.
+ *
+ * Staff type what is written on a receipt — '077 900100' — but the column
+ * holds '+23277900100', which does not contain that string. This strips the
+ * trunk '0' and any dialling code so a `contains` finds the number either way,
+ * and tolerates a partial ('77900') that `normaliseSierraLeoneMobile` would
+ * rightly reject.
+ */
+export function phoneSearchFragment(input: string): string | null {
+  let digits = input.replace(/\D/g, '');
+  if (digits.length < 3) return null;
+
+  if (digits.startsWith(`00${SIERRA_LEONE_DIALLING_CODE}`)) digits = digits.slice(2 + SIERRA_LEONE_DIALLING_CODE.length);
+  else if (digits.startsWith(SIERRA_LEONE_DIALLING_CODE) && digits.length > 9) digits = digits.slice(SIERRA_LEONE_DIALLING_CODE.length);
+
+  if (digits.startsWith('0')) digits = digits.slice(1);
+
+  return digits.length >= 3 ? digits : null;
+}
+
 /** Whapi wants digits only. The only place the '+' comes off. */
 export const toWhapiNumber = (e164: string): string => e164.replace(/^\+/, '');
 

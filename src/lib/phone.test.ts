@@ -2,7 +2,13 @@ import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
 import { ValidationError } from '@/lib/errors';
-import { formatLocal, isSierraLeoneMobile, normaliseSierraLeoneMobile, toWhapiNumber } from '@/lib/phone';
+import {
+  formatLocal,
+  isSierraLeoneMobile,
+  normaliseSierraLeoneMobile,
+  phoneSearchFragment,
+  toWhapiNumber,
+} from '@/lib/phone';
 
 describe('phone', () => {
   it('normalises the shapes people actually type', () => {
@@ -56,5 +62,26 @@ describe('phone', () => {
 
   it('formats for a local reader', () => {
     assert.equal(formatLocal('+23276123456'), '076 123456');
+  });
+});
+
+describe('phone search', () => {
+  it('matches a stored E.164 from what staff actually type', () => {
+    // The column holds '+23277900100'; none of these appear in it verbatim.
+    for (const typed of ['077 900100', '077900100', '+232 77 900100', '00232 77900100', '77900100']) {
+      const fragment = phoneSearchFragment(typed);
+      assert.ok(fragment, `no fragment for ${typed}`);
+      assert.ok('+23277900100'.includes(fragment), `${typed} -> ${fragment} does not match`);
+    }
+  });
+
+  it('accepts a partial number that full validation would reject', () => {
+    assert.equal(phoneSearchFragment('77900'), '77900');
+    assert.equal(isSierraLeoneMobile('77900'), false);
+  });
+
+  it('ignores a fragment too short to be useful', () => {
+    assert.equal(phoneSearchFragment('7'), null);
+    assert.equal(phoneSearchFragment('PNS'), null);
   });
 });
