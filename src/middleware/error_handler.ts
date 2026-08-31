@@ -2,7 +2,14 @@ import type { ErrorRequestHandler, RequestHandler } from 'express';
 import { ZodError } from 'zod';
 
 import { isProduction } from '@/config/env';
-import { AppError, NotFoundError, ValidationError, isAppError } from '@/lib/errors';
+import {
+  AppError,
+  InvalidModifierSelectionError,
+  ItemUnavailableError,
+  NotFoundError,
+  ValidationError,
+  isAppError,
+} from '@/lib/errors';
 
 /** Nothing matched. Hand a 404 to the error handler rather than letting Express render HTML. */
 export const notFoundHandler: RequestHandler = (req, _res, next) => {
@@ -66,7 +73,12 @@ export const errorHandler: ErrorRequestHandler = (error, req, res, next) => {
       code: appError.code,
       message: appError.message,
       requestId: req.id,
+      // These three carry the detail a client needs to correct the request:
+      // which field, which item, which group. All of it describes what the
+      // caller sent, so none of it leaks anything they did not already know.
       ...(appError instanceof ValidationError && appError.issues.length > 0 ? { issues: appError.issues } : {}),
+      ...(appError instanceof ItemUnavailableError ? { unavailable: appError.unavailable } : {}),
+      ...(appError instanceof InvalidModifierSelectionError ? { problems: appError.problems } : {}),
     },
   });
 };

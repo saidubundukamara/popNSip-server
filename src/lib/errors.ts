@@ -112,4 +112,48 @@ export class InternalError extends AppError {
   }
 }
 
+/**
+ * The cart referenced something that is no longer orderable. Carried as its own
+ * type because the storefront, the POS and the WhatsApp bot all need to name
+ * the offending lines back to the customer (FR-MENU-5).
+ */
+export class ItemUnavailableError extends AppError {
+  readonly statusCode = 409;
+  readonly code = 'ITEM_UNAVAILABLE';
+
+  constructor(
+    readonly unavailable: { menuItemId: string; name: string; reason: string }[],
+    message = 'Some items are no longer available.',
+  ) {
+    super(message);
+  }
+}
+
+/** A modifier group's minSelect/maxSelect was not satisfied (FR-MENU-4). */
+export class InvalidModifierSelectionError extends AppError {
+  readonly statusCode = 422;
+  readonly code = 'INVALID_MODIFIER_SELECTION';
+
+  constructor(
+    readonly problems: { groupId: string; groupName: string; message: string }[],
+    message = 'Some choices are missing or invalid.',
+  ) {
+    super(message);
+  }
+}
+
+/** A status change the state machine does not allow (PRD §7.2). */
+export class IllegalTransitionError extends AppError {
+  readonly statusCode = 409;
+  readonly code = 'ILLEGAL_TRANSITION';
+
+  constructor(
+    readonly from: string,
+    readonly to: string,
+    message = `An order cannot go from ${from} to ${to}.`,
+  ) {
+    super(message, { from, to });
+  }
+}
+
 export const isAppError = (error: unknown): error is AppError => error instanceof AppError;
