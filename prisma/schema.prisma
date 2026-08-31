@@ -1,0 +1,565 @@
+// popNsip data model — PRD §8.
+//
+// Conventions this file holds to, all of them load-bearing:
+//   * Money is an integer count of minor units, in a column named `…Minor`.
+//     Never Float, never Decimal. Currency is fixed to SLE.
+//   * Tables and columns are snake_case; models and fields are camelCase.
+//     Phase 8's analytics run raw SQL (`date_trunc('hour', placed_at …)`), so
+//     the mapping is not cosmetic.
+//   * Anything an order can reference is soft-archived (`archivedAt`), never
+//     deleted (FR-MENU-7).
+//   * Orders snapshot the names and prices they were placed at, so menu edits
+//     can never rewrite history (FR-ORDER-2).
+
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ─── enums ──────────────────────────────────────────────────────────────────
+
+enum StaffRole {
+  OWNER
+  MANAGER
+  STAFF
+
+  @@map("staff_role")
+}
+
+/// PRD §7.1. Transitions are enforced in order_status_service, not here.
+enum OrderStatus {
+  DRAFT
+  AWAITING_PAYMENT
+  PENDING_CONFIRMATION
+  CONFIRMED
+  PREPARING
+  READY
+  OUT_FOR_DELIVERY
+  SERVED
+  COMPLETED
+  CANCELLED
+  REFUNDED
+
+  @@map("order_status")
+}
+
+enum OrderType {
+  DELIVERY
+  PICKUP
+  DINE_IN
+  WALK_IN
+
+  @@map("order_type")
+}
+
+/// Where the order came from. WALK_IN orders are POS-entered.
+enum OrderChannel {
+  WEB
+  WHATSAPP
+  POS
+
+  @@map("order_channel")
+}
+
+enum PaymentMethod {
+  MOBILE_MONEY
+  CASH
+
+  @@map("payment_method")
+}
+
+enum PaymentStatus {
+  PENDING
+  SUCCEEDED
+  FAILED
+  EXPIRED
+  REFUNDED
+
+  @@map("payment_status")
+}
+
+/// Who caused a status change. Only SYSTEM may move an order out of
+/// AWAITING_PAYMENT on the basis of payment (PRD §7.2).
+enum ActorType {
+  STAFF
+  CUSTOMER
+  SYSTEM
+
+  @@map("actor_type")
+}
+
+enum MessageDirection {
+  INBOUND
+  OUTBOUND
+
+  @@map("message_direction")
+}
+
+enum MessageStatus {
+  QUEUED
+  SENT
+  FAILED
+
+  @@map("message_status")
+}
+
+// ─── branch, staff, sessions ────────────────────────────────────────────────
+
+model Branch {
+  id              String   @id @default(cuid())
+  name            String
+  address         String
+  phoneE164       String   @map("phone_e164")
+  timezone        String   @default("Africa/Freetown")
+  /// { "mon": [{ "open": "09:00", "close": "22:00" }], … }
+  openingHours    Json     @default("{}") @map("opening_hours")
+  /// Manual override of the opening-hours calculation. Null means "follow hours".
+  isOpenOverride  Boolean? @map("is_open_override")
+  currency        String   @default("SLE")
+  deliveryEnabled Boolean  @default(true) @map("delivery_enabled")
+  pickupEnabled   Boolean  @default(true) @map("pickup_enabled")
+  dineInEnabled   Boolean  @default(true) @map("dine_in_enabled")
+  createdAt       DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt       DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  categories Category[]
+  tables     RestaurantTable[]
+  staffUsers StaffUser[]
+  orders     Order[]
+
+  @@map("branches")
+}
+
+model StaffUser {
+  id           String    @id @default(cuid())
+  branchId     String    @map("branch_id")
+  email        String    @unique
+  passwordHash String    @map("password_hash")
+  name         String
+  role         StaffRole @default(STAFF)
+  /// Deactivation must revoke access on the next request (FR-AUTH-5):
+  /// deserializeUser rejects an inactive user.
+  isActive     Boolean   @default(true) @map("is_active")
+  lastLoginAt  DateTime? @map("last_login_at") @db.Timestamptz(6)
+  createdAt    DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt    DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  branch           Branch             @relation(fields: [branchId], references: [id], onDelete: Restrict)
+  auditLogs        AuditLog[]
+  statusEvents     OrderStatusEvent[]
+  adjustments      OrderAdjustment[]
+  recordedPayments Payment[]
+
+  @@index([branchId, isActive])
+  @@map("staff_users")
+}
+
+/// Owned by connect-pg-simple, not by application code — the shape below
+/// mirrors its DDL exactly so `prisma migrate` creates the table and never
+/// reports drift against it. Nothing in src/ should read or write this model.
+model Session {
+  sid    String   @id
+  sess   Json     @db.Json
+  expire DateTime @db.Timestamp(6)
+
+  @@index([expire], map: "IDX_session_expire")
+  @@map("session")
+}
+
+// ─── menu ───────────────────────────────────────────────────────────────────
+
+model Category {
+  id         String    @id @default(cuid())
+  branchId   String    @map("branch_id")
+  name       String
+  sortOrder  Int       @default(0) @map("sort_order")
+  isActive   Boolean   @default(true) @map("is_active")
+  archivedAt DateTime? @map("archived_at") @db.Timestamptz(6)
+  createdAt  DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt  DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  branch Branch     @relation(fields: [branchId], references: [id], onDelete: Restrict)
+  items  MenuItem[]
+
+  @@index([branchId, sortOrder])
+  @@index([branchId, archivedAt])
+  @@map("categories")
+}
+
+model MenuItem {
+  id                String    @id @default(cuid())
+  categoryId        String    @map("category_id")
+  name              String
+  description       String?
+  basePriceMinor    Int       @map("base_price_minor")
+  imageUrl          String?   @map("image_url")
+  /// Cloudinary public_id — the handle that makes deletion possible later.
+  imagePublicId     String?   @map("image_public_id")
+  isAvailable       Boolean   @default(true) @map("is_available")
+  sortOrder         Int       @default(0) @map("sort_order")
+  archivedAt        DateTime? @map("archived_at") @db.Timestamptz(6)
+  /// Whapi catalog mapping. `productRetailerId` is our own stable id (the row's
+  /// own id), which is how an inbound cart line resolves back to a menu item.
+  whapiProductId    String?   @map("whapi_product_id")
+  productRetailerId String?   @unique @map("product_retailer_id")
+  createdAt         DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt         DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  category       Category        @relation(fields: [categoryId], references: [id], onDelete: Restrict)
+  variants       ItemVariant[]
+  modifierGroups ModifierGroup[]
+  orderItems     OrderItem[]
+
+  @@index([categoryId, sortOrder])
+  @@index([categoryId, archivedAt])
+  @@map("menu_items")
+}
+
+model ItemVariant {
+  id          String    @id @default(cuid())
+  menuItemId  String    @map("menu_item_id")
+  name        String
+  priceMinor  Int       @map("price_minor")
+  isAvailable Boolean   @default(true) @map("is_available")
+  sortOrder   Int       @default(0) @map("sort_order")
+  archivedAt  DateTime? @map("archived_at") @db.Timestamptz(6)
+  createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt   DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  menuItem   MenuItem    @relation(fields: [menuItemId], references: [id], onDelete: Restrict)
+  orderItems OrderItem[]
+
+  @@index([menuItemId, sortOrder])
+  @@map("item_variants")
+}
+
+model ModifierGroup {
+  id         String   @id @default(cuid())
+  menuItemId String   @map("menu_item_id")
+  name       String
+  /// Enforced by pricing_service before an order is accepted (FR-SHOP-2).
+  minSelect  Int      @default(0) @map("min_select")
+  maxSelect  Int      @default(1) @map("max_select")
+  sortOrder  Int      @default(0) @map("sort_order")
+  createdAt  DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt  DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  menuItem  MenuItem   @relation(fields: [menuItemId], references: [id], onDelete: Restrict)
+  modifiers Modifier[]
+
+  @@index([menuItemId, sortOrder])
+  @@map("modifier_groups")
+}
+
+model Modifier {
+  id              String    @id @default(cuid())
+  modifierGroupId String    @map("modifier_group_id")
+  name            String
+  priceMinor      Int       @default(0) @map("price_minor")
+  isAvailable     Boolean   @default(true) @map("is_available")
+  sortOrder       Int       @default(0) @map("sort_order")
+  archivedAt      DateTime? @map("archived_at") @db.Timestamptz(6)
+  createdAt       DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt       DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  group          ModifierGroup       @relation(fields: [modifierGroupId], references: [id], onDelete: Restrict)
+  orderModifiers OrderItemModifier[]
+
+  @@index([modifierGroupId, sortOrder])
+  @@map("modifiers")
+}
+
+model RestaurantTable {
+  id        String   @id @default(cuid())
+  branchId  String   @map("branch_id")
+  /// Short code embedded in the QR link (`/menu?table=T4`).
+  code      String
+  label     String
+  isActive  Boolean  @default(true) @map("is_active")
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  branch Branch  @relation(fields: [branchId], references: [id], onDelete: Restrict)
+  orders Order[]
+
+  @@unique([branchId, code])
+  @@map("restaurant_tables")
+}
+
+// ─── customers ──────────────────────────────────────────────────────────────
+
+model Customer {
+  id                 String   @id @default(cuid())
+  /// E.164 with the leading '+'. Stripped only at the Whapi boundary.
+  phoneE164          String   @unique @map("phone_e164")
+  name               String?
+  lastAddress        String?  @map("last_address")
+  orderCount         Int      @default(0) @map("order_count")
+  lifetimeSpendMinor Int      @default(0) @map("lifetime_spend_minor")
+  marketingOptOut    Boolean  @default(false) @map("marketing_opt_out")
+  createdAt          DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt          DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  orders        Order[]
+  conversations WhatsAppConversation[]
+
+  @@map("customers")
+}
+
+// ─── orders ─────────────────────────────────────────────────────────────────
+
+model Order {
+  id         String  @id @default(cuid())
+  /// Short human code shown to customers and staff, e.g. PNS-4821.
+  reference  String  @unique
+  branchId   String  @map("branch_id")
+  customerId String? @map("customer_id")
+  tableId    String? @map("table_id")
+
+  type    OrderType
+  status  OrderStatus  @default(DRAFT)
+  channel OrderChannel
+
+  deliveryAddress String? @map("delivery_address")
+  deliveryNotes   String? @map("delivery_notes")
+
+  subtotalMinor    Int    @map("subtotal_minor")
+  /// Sum of OrderAdjustment.amountMinor. Negative for discounts.
+  adjustmentsMinor Int    @default(0) @map("adjustments_minor")
+  totalMinor       Int    @map("total_minor")
+  currency         String @default("SLE")
+
+  /// Unguessable token for the public tracking page (FR-ORDER-6).
+  trackingToken  String  @unique @map("tracking_token")
+  /// Client-generated per checkout attempt; a retry returns the same order
+  /// instead of creating a second one (FR-SHOP-10).
+  idempotencyKey String? @unique @map("idempotency_key")
+
+  /// When an unpaid order stops being held (jobs/expire_orders).
+  expiresAt   DateTime? @map("expires_at") @db.Timestamptz(6)
+  /// Set when a payment confirms after the order was auto-cancelled — a human
+  /// decides, the system never resurrects the order (FR-PAY-8).
+  needsReview Boolean   @default(false) @map("needs_review")
+
+  placedAt     DateTime  @default(now()) @map("placed_at") @db.Timestamptz(6)
+  completedAt  DateTime? @map("completed_at") @db.Timestamptz(6)
+  cancelledAt  DateTime? @map("cancelled_at") @db.Timestamptz(6)
+  cancelReason String?   @map("cancel_reason")
+  createdAt    DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt    DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  branch       Branch             @relation(fields: [branchId], references: [id], onDelete: Restrict)
+  customer     Customer?          @relation(fields: [customerId], references: [id], onDelete: SetNull)
+  table        RestaurantTable?   @relation(fields: [tableId], references: [id], onDelete: SetNull)
+  items        OrderItem[]
+  adjustments  OrderAdjustment[]
+  statusEvents OrderStatusEvent[]
+  payments     Payment[]
+  messages     WhatsAppMessage[]
+
+  /// The POS queue reads this index and nothing else.
+  @@index([branchId, status, placedAt])
+  @@index([customerId, placedAt])
+  @@index([status, expiresAt])
+  @@map("orders")
+}
+
+model OrderItem {
+  id         String  @id @default(cuid())
+  orderId    String  @map("order_id")
+  menuItemId String  @map("menu_item_id")
+  variantId  String? @map("variant_id")
+
+  /// Snapshots. The menu may change or be archived; a placed order may not.
+  itemNameSnapshot    String  @map("item_name_snapshot")
+  variantNameSnapshot String? @map("variant_name_snapshot")
+  unitPriceMinor      Int     @map("unit_price_minor")
+
+  quantity       Int
+  /// (unitPriceMinor + Σ modifier priceMinor) × quantity
+  lineTotalMinor Int     @map("line_total_minor")
+  notes          String?
+
+  order     Order               @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  menuItem  MenuItem            @relation(fields: [menuItemId], references: [id], onDelete: Restrict)
+  variant   ItemVariant?        @relation(fields: [variantId], references: [id], onDelete: Restrict)
+  modifiers OrderItemModifier[]
+
+  @@index([orderId])
+  @@index([menuItemId])
+  @@map("order_items")
+}
+
+model OrderItemModifier {
+  id          String @id @default(cuid())
+  orderItemId String @map("order_item_id")
+  modifierId  String @map("modifier_id")
+
+  nameSnapshot String @map("name_snapshot")
+  priceMinor   Int    @map("price_minor")
+
+  orderItem OrderItem @relation(fields: [orderItemId], references: [id], onDelete: Cascade)
+  modifier  Modifier  @relation(fields: [modifierId], references: [id], onDelete: Restrict)
+
+  @@index([orderItemId])
+  @@map("order_item_modifiers")
+}
+
+model OrderAdjustment {
+  id               String   @id @default(cuid())
+  orderId          String   @map("order_id")
+  label            String
+  /// Negative for a discount. Staff-applied delivery fees are positive.
+  amountMinor      Int      @map("amount_minor")
+  createdByStaffId String?  @map("created_by_staff_id")
+  createdAt        DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  order          Order      @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  createdByStaff StaffUser? @relation(fields: [createdByStaffId], references: [id], onDelete: SetNull)
+
+  @@index([orderId])
+  @@map("order_adjustments")
+}
+
+model OrderStatusEvent {
+  id           String       @id @default(cuid())
+  orderId      String       @map("order_id")
+  /// Null on the row that records an order's initial status.
+  fromStatus   OrderStatus? @map("from_status")
+  toStatus     OrderStatus  @map("to_status")
+  actorType    ActorType    @map("actor_type")
+  actorStaffId String?      @map("actor_staff_id")
+  reason       String?
+  createdAt    DateTime     @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  order      Order      @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  actorStaff StaffUser? @relation(fields: [actorStaffId], references: [id], onDelete: SetNull)
+
+  @@index([orderId, createdAt])
+  @@map("order_status_events")
+}
+
+model Payment {
+  id          String        @id @default(cuid())
+  orderId     String        @map("order_id")
+  method      PaymentMethod
+  status      PaymentStatus @default(PENDING)
+  amountMinor Int           @map("amount_minor")
+
+  provider    String? // 'monime'
+  /// Monime's id for the payment code. Paired with `provider` it is unique.
+  providerRef String? @map("provider_ref")
+  /// The USSD string the customer dials.
+  ussdCode    String? @map("ussd_code")
+  /// The provider response verbatim, for dispute resolution.
+  rawPayload  Json?   @map("raw_payload")
+
+  /// Cash only: what the customer handed over, and the change given.
+  tenderedMinor Int? @map("tendered_minor")
+  changeMinor   Int? @map("change_minor")
+
+  recordedByStaffId String?   @map("recorded_by_staff_id")
+  settledAt         DateTime? @map("settled_at") @db.Timestamptz(6)
+  createdAt         DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt         DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  order           Order      @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  recordedByStaff StaffUser? @relation(fields: [recordedByStaffId], references: [id], onDelete: SetNull)
+
+  @@unique([provider, providerRef])
+  @@index([orderId])
+  @@index([status, createdAt])
+  @@map("payments")
+}
+
+// ─── integrations ───────────────────────────────────────────────────────────
+
+/// Replay protection. A provider that delivers the same event twice credits
+/// once (FR-PAY-5).
+model WebhookEvent {
+  id              String    @id @default(cuid())
+  provider        String // 'monime' | 'whapi'
+  providerEventId String    @unique @map("provider_event_id")
+  eventName       String    @map("event_name")
+  payload         Json
+  receivedAt      DateTime  @default(now()) @map("received_at") @db.Timestamptz(6)
+  processedAt     DateTime? @map("processed_at") @db.Timestamptz(6)
+  error           String?
+
+  @@index([provider, receivedAt])
+  @@map("webhook_events")
+}
+
+/// The bot session, one row per conversation. Shape follows byn2_v2's
+/// bot_sessions: intent + step + jsonb metadata + expiry.
+model WhatsAppConversation {
+  id            String    @id @default(cuid())
+  phoneE164     String    @map("phone_e164")
+  customerId    String?   @map("customer_id")
+  intent        String?
+  step          String?
+  metadata      Json      @default("{}")
+  lastInboundAt DateTime? @map("last_inbound_at") @db.Timestamptz(6)
+  /// Escalated to a human; the bot stays silent until staff release it.
+  needsHuman    Boolean   @default(false) @map("needs_human")
+  /// 30 minutes after the last inbound message.
+  expiresAt     DateTime? @map("expires_at") @db.Timestamptz(6)
+  createdAt     DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt     DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  customer Customer?         @relation(fields: [customerId], references: [id], onDelete: SetNull)
+  messages WhatsAppMessage[]
+
+  @@index([phoneE164, expiresAt])
+  @@index([needsHuman, lastInboundAt])
+  @@map("whatsapp_conversations")
+}
+
+/// Outbound sends are queued here and retried with backoff; a failed send
+/// never blocks a status transition (FR-WA-8).
+model WhatsAppMessage {
+  id                String           @id @default(cuid())
+  conversationId    String?          @map("conversation_id")
+  orderId           String?          @map("order_id")
+  direction         MessageDirection
+  /// 'text' | 'interactive' | 'image' | 'link_preview' | 'order'
+  kind              String
+  templateName      String?          @map("template_name")
+  body              String?
+  status            MessageStatus    @default(QUEUED)
+  attempts          Int              @default(0)
+  error             String?
+  providerMessageId String?          @map("provider_message_id")
+  sentAt            DateTime?        @map("sent_at") @db.Timestamptz(6)
+  createdAt         DateTime         @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  conversation WhatsAppConversation? @relation(fields: [conversationId], references: [id], onDelete: SetNull)
+  order        Order?                @relation(fields: [orderId], references: [id], onDelete: SetNull)
+
+  @@index([conversationId, createdAt])
+  @@index([status, attempts])
+  @@map("whatsapp_messages")
+}
+
+/// Every money-touching or destructive staff action (FR-AUTH-7).
+model AuditLog {
+  id          String   @id @default(cuid())
+  staffUserId String?  @map("staff_user_id")
+  action      String
+  targetType  String   @map("target_type")
+  targetId    String?  @map("target_id")
+  before      Json?
+  after       Json?
+  requestId   String?  @map("request_id")
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  staffUser StaffUser? @relation(fields: [staffUserId], references: [id], onDelete: SetNull)
+
+  @@index([staffUserId, createdAt])
+  @@index([targetType, targetId])
+  @@map("audit_logs")
+}
