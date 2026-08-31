@@ -4,6 +4,7 @@ import { timingSafeEqual } from 'node:crypto';
 import { env } from '@/config/env';
 import { NotFoundError, UnauthorizedError } from '@/lib/errors';
 import { expireOrders } from '@/jobs/expire_orders';
+import { flushWaQueue } from '@/jobs/flush_wa_queue';
 import { reconcilePayments } from '@/jobs/reconcile_payments';
 
 /**
@@ -21,6 +22,7 @@ const JOBS = {
   // webhook is settled before expiry would have cancelled it.
   'reconcile-payments': reconcilePayments,
   'expire-orders': expireOrders,
+  'flush-wa-queue': flushWaQueue,
 } as const;
 
 function authorise(header: string | undefined): void {

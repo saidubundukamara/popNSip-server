@@ -11,6 +11,7 @@ import { requestId } from '@/middleware/request_id';
 import { jobsRouter } from '@/routes/jobs';
 import { routes } from '@/routes';
 import { monimeWebhookRouter } from '@/routes/webhooks/monime';
+import { whapiWebhookRouter } from '@/routes/webhooks/whapi';
 
 /**
  * Middleware order is load-bearing. Read it top to bottom: correlation id
@@ -34,9 +35,10 @@ export function createApp(): Express {
     }),
   );
 
-  // Webhooks mount HERE, ahead of express.json(): the signature is computed
-  // over the exact bytes the provider sent, and a re-serialised body will not
-  // match. Phase 7 adds the Whapi receiver alongside this one.
+  // Monime mounts HERE, ahead of express.json(): its signature is computed
+  // over the exact bytes sent, and a re-serialised body will not match.
+  // Whapi does not sign, so its receiver sits after the parser like any other
+  // route.
   app.use(monimeWebhookRouter);
 
   app.use(express.json({ limit: '1mb' }));
@@ -50,6 +52,7 @@ export function createApp(): Express {
   app.use(passport.initialize());
   app.use(passport.session());
 
+  app.use(whapiWebhookRouter);
   app.use(jobsRouter);
   app.use(routes);
 

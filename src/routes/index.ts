@@ -7,6 +7,7 @@ import { publicOrdersRouter } from '@/routes/public/orders';
 import { staffMenuRouter } from '@/routes/staff/menu';
 import { staffOrdersRouter } from '@/routes/staff/orders';
 import { staffUsersRouter } from '@/routes/staff/users';
+import { staffWhatsAppRouter } from '@/routes/staff/whatsapp';
 
 /**
  * Route composition root. As the phases land this gains the public menu and
@@ -23,3 +24,4 @@ routes.use(publicOrdersRouter);
 routes.use(staffMenuRouter);
 routes.use(staffOrdersRouter);
 routes.use(staffUsersRouter);
+routes.use(staffWhatsAppRouter);
