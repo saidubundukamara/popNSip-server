@@ -3,6 +3,7 @@ import type { Server } from 'node:http';
 import { createApp } from '@/app';
 import { env } from '@/config/env';
 import { logger } from '@/lib/logger';
+import { closeConnections } from '@/services/sse_service';
 
 const app = createApp();
 
@@ -24,6 +25,9 @@ function shutdown(signal: NodeJS.Signals): void {
   if (shuttingDown) return;
   shuttingDown = true;
   logger.info({ signal }, 'Shutting down');
+
+  // SSE streams hold the server open indefinitely, so they are ended first.
+  closeConnections();
 
   const forceExit = setTimeout(() => {
     logger.error('Graceful shutdown timed out; forcing exit');
