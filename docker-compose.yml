@@ -1,0 +1,26 @@
+# Local development database. popNsip owns this container outright, so
+# tearing it down (`docker compose down -v`) destroys only popNsip's data.
+name: popnsip
+
+services:
+  postgres:
+    image: postgres:16
+    container_name: popnsip-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: popnsip
+      POSTGRES_PASSWORD: popnsip
+      POSTGRES_DB: popnsip
+    ports:
+      - "5432:5432"
+    volumes:
+      - popnsip_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U popnsip -d popnsip"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  popnsip_pgdata:
+    name: popnsip_pgdata
