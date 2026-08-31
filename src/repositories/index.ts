@@ -8,6 +8,7 @@ import { MenuItemRepository } from '@/repositories/menu_item.repository';
 import { OrderRepository } from '@/repositories/order.repository';
 import { ModifierRepository } from '@/repositories/modifier.repository';
 import { ModifierGroupRepository } from '@/repositories/modifier_group.repository';
+import { OrderAdjustmentRepository } from '@/repositories/order_adjustment.repository';
 import { OrderStatusEventRepository } from '@/repositories/order_status_event.repository';
 import { PaymentRepository } from '@/repositories/payment.repository';
 import { StaffUserRepository } from '@/repositories/staff_user.repository';
@@ -35,6 +36,7 @@ export const repositories = {
   menuItems: new MenuItemRepository(prisma),
   modifierGroups: new ModifierGroupRepository(prisma),
   modifiers: new ModifierRepository(prisma),
+  adjustments: new OrderAdjustmentRepository(prisma),
   orders: new OrderRepository(prisma),
   payments: new PaymentRepository(prisma),
   staffUsers: new StaffUserRepository(prisma),

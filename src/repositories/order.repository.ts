@@ -49,6 +49,21 @@ export class OrderRepository extends BaseRepository<PrismaClient['order'], Order
     });
   }
 
+  /** One order with everything the POS detail view renders. */
+  findByIdDetailed(id: string) {
+    return this.delegate(this.db).findUnique({
+      where: { id },
+      include: {
+        items: { include: { modifiers: true } },
+        customer: true,
+        payments: { orderBy: { createdAt: 'asc' } },
+        adjustments: { orderBy: { createdAt: 'asc' } },
+        statusEvents: { orderBy: { createdAt: 'asc' } },
+        table: true,
+      },
+    });
+  }
+
   /** Candidates for jobs/expire_orders and jobs/reconcile_payments. */
   findExpiredAwaitingPayment(now: Date) {
     return this.delegate(this.db).findMany({
