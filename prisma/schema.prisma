@@ -173,14 +173,15 @@ model Session {
 // ─── menu ───────────────────────────────────────────────────────────────────
 
 model Category {
-  id         String    @id @default(cuid())
-  branchId   String    @map("branch_id")
-  name       String
-  sortOrder  Int       @default(0) @map("sort_order")
-  isActive   Boolean   @default(true) @map("is_active")
-  archivedAt DateTime? @map("archived_at") @db.Timestamptz(6)
-  createdAt  DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt  DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+  id          String    @id @default(cuid())
+  branchId    String    @map("branch_id")
+  name        String
+  description String?
+  sortOrder   Int       @default(0) @map("sort_order")
+  isActive    Boolean   @default(true) @map("is_active")
+  archivedAt  DateTime? @map("archived_at") @db.Timestamptz(6)
+  createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt   DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
 
   branch Branch     @relation(fields: [branchId], references: [id], onDelete: Restrict)
   items  MenuItem[]
