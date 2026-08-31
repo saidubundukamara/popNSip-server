@@ -120,6 +120,9 @@ model Branch {
   /// Manual override of the opening-hours calculation. Null means "follow hours".
   isOpenOverride  Boolean? @map("is_open_override")
   currency        String   @default("SLE")
+  /// Kill switch for the WhatsApp bot. When false the webhook still answers
+  /// 200 and tells the customer we are unavailable, rather than going silent.
+  botEnabled      Boolean  @default(true) @map("bot_enabled")
   deliveryEnabled Boolean  @default(true) @map("delivery_enabled")
   pickupEnabled   Boolean  @default(true) @map("pickup_enabled")
   dineInEnabled   Boolean  @default(true) @map("dine_in_enabled")
