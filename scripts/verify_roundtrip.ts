@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 
 import { prisma } from '@/db/client';
 import { ActorType, OrderChannel, OrderStatus, OrderType } from '@/generated/prisma/enums';
+import { transition } from '@/services/order_status_service';
 import { repositories as repos } from '@/repositories';
 
 /**
@@ -127,6 +128,34 @@ async function main(): Promise<void> {
   const claim = { provider: 'monime', providerEventId: eventId, eventName: 'payment_code.completed', payload: {} };
   assert.ok(await repos.webhookEvents.claim(claim), 'first claim should succeed');
   assert.equal(await repos.webhookEvents.claim(claim), null, 'replayed event should not claim twice');
+
+  // ── the state machine, against a real row ─────────────────────────────────
+  const staffActor = { type: ActorType.STAFF, staffId: (await repos.staffUsers.findByEmail('owner@popnsip.test'))!.id, isManager: true } as const;
+
+  await assert.rejects(
+    () => transition({ orderId: created.id, to: OrderStatus.COMPLETED, actor: staffActor }),
+    /cannot go from/,
+    'skipping straight to COMPLETED should be refused',
+  );
+
+  for (const next of [OrderStatus.CONFIRMED, OrderStatus.PREPARING, OrderStatus.READY, OrderStatus.COMPLETED]) {
+    await transition({ orderId: created.id, to: next, actor: staffActor });
+  }
+
+  const finished = await repos.orders.findById(created.id);
+  assert.equal(finished?.status, OrderStatus.COMPLETED);
+  assert.ok(finished?.completedAt, 'completedAt should be stamped');
+  assert.equal((await repos.statusEvents.findForOrder(created.id)).length, 5, 'every hop should be recorded');
+
+  const counted = await repos.customers.findById(customer.id);
+  assert.equal(counted?.orderCount, 1, 'completion should count toward the customer total');
+  assert.equal(counted?.lifetimeSpendMinor, lineTotalMinor);
+
+  await assert.rejects(
+    () => transition({ orderId: created.id, to: OrderStatus.PREPARING, actor: staffActor }),
+    /cannot go from/,
+    'a completed order should not reopen',
+  );
 
   // ── clean up ──────────────────────────────────────────────────────────────
   await prisma.order.delete({ where: { id: created.id } });
