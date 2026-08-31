@@ -23,11 +23,22 @@ export class OrderRepository extends BaseRepository<PrismaClient['order'], Order
     return new OrderRepository(tx) as this;
   }
 
-  /** The public tracking page. Everything it renders, in one query. */
+  /**
+   * The public tracking page. Everything it renders, in one query.
+   *
+   * The customer is included for the server's own use — the phone number
+   * scopes a payment code to one handset. The route builds its response
+   * field by field, so nothing here reaches the browser by default.
+   */
   findByTrackingToken(token: string) {
     return this.delegate(this.db).findUnique({
       where: { trackingToken: token },
-      include: { items: { include: { modifiers: true } }, payments: true, adjustments: true },
+      include: {
+        items: { include: { modifiers: true } },
+        payments: true,
+        adjustments: true,
+        customer: true,
+      },
     });
   }
 
@@ -64,7 +75,20 @@ export class OrderRepository extends BaseRepository<PrismaClient['order'], Order
     });
   }
 
-  /** Candidates for jobs/expire_orders and jobs/reconcile_payments. */
+  /**
+   * Orders whose payment has had a fair chance to report and has not.
+   * Reconciliation asks Monime about each of these directly (FR-PAY-7).
+   */
+  findAwaitingPaymentOlderThan(cutoff: Date, take = 200) {
+    return this.delegate(this.db).findMany({
+      where: { status: OrderStatus.AWAITING_PAYMENT, placedAt: { lt: cutoff } },
+      orderBy: { placedAt: 'asc' },
+      take,
+      include: { payments: true },
+    });
+  }
+
+  /** Candidates for jobs/expire_orders. */
   findExpiredAwaitingPayment(now: Date) {
     return this.delegate(this.db).findMany({
       where: { status: OrderStatus.AWAITING_PAYMENT, expiresAt: { lt: now } },
