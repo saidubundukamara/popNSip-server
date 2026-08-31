@@ -10,7 +10,12 @@ import { repositories as repos } from '@/repositories';
 import { audit } from '@/services/audit_service';
 import { addAdjustment, createPosOrder } from '@/services/order_service';
 import { allowedTransitions, transition } from '@/services/order_status_service';
-import { balanceFor, recordCashPayment, recordRefund } from '@/services/payment_service';
+import {
+  balanceFor,
+  createMobileMoneyPayment,
+  recordCashPayment,
+  recordRefund,
+} from '@/services/payment_service';
 import { subscribe } from '@/services/sse_service';
 
 /**
@@ -324,5 +329,37 @@ staffOrdersRouter.post(
       requestId: req.id,
     });
     res.json({ order });
+  }),
+);
+
+/**
+ * Staff-initiated mobile-money request (FR-PAY-1). The staff member pushes a
+ * code to the customer's handset; only a verified webhook or reconciliation
+ * can then mark it paid.
+ */
+staffOrdersRouter.post(
+  '/api/staff/orders/:id/payment-request',
+  requireAuth,
+  handler(async (req, res) => {
+    const actor = actorOf(req);
+    const id = requiredParam(req.params.id, 'Order');
+    const { phone } = z.object({ phone: z.string().trim().optional() }).parse(req.body ?? {});
+
+    const result = await createMobileMoneyPayment({
+      orderId: id,
+      phoneE164: phone,
+      staffId: actor.id,
+    });
+
+    await audit({
+      actor,
+      action: 'payment.monime_requested',
+      targetType: 'Order',
+      targetId: id,
+      after: { amountMinor: result.amountMinor },
+      requestId: req.id,
+    });
+
+    res.status(201).json({ ussdCode: result.ussdCode, amountMinor: result.amountMinor });
   }),
 );

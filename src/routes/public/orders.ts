@@ -10,6 +10,7 @@ import { isTest } from '@/config/env';
 import { TooManyRequestsError } from '@/lib/errors';
 import { repositories } from '@/repositories';
 import { createOrder, getOrderByTrackingToken } from '@/services/order_service';
+import { createMobileMoneyPayment, findPendingMobileMoneyPayment } from '@/services/payment_service';
 import { getPublicSettings } from '@/services/settings_service';
 
 /** Placing an order is stricter than reading a menu. */
@@ -149,6 +150,57 @@ publicOrdersRouter.get(
       settledMinor,
       balanceDueMinor,
       events: events.map((event) => ({ toStatus: event.toStatus, createdAt: event.createdAt })),
+    });
+  }),
+);
+
+/**
+ * Start a mobile-money payment for an order the customer already placed
+ * (PRD §10.1). Reached by tracking token, so it needs no session.
+ */
+publicOrdersRouter.post(
+  '/api/orders/track/:token/pay',
+  createOrderLimiter,
+  handler(async (req, res) => {
+    const token = req.params.token;
+    if (typeof token !== 'string' || token.length < 16) throw new NotFoundError('We could not find that order.');
+
+    const { order } = await getOrderByTrackingToken(token);
+    const { ussdCode, amountMinor } = await createMobileMoneyPayment({
+      orderId: order.id,
+      phoneE164: order.customer?.phoneE164,
+    });
+
+    res.set('Cache-Control', 'no-store');
+    res.json({ ussdCode, amountMinor, currency: order.currency });
+  }),
+);
+
+/**
+ * Payment state for the "checking your payment…" screen.
+ *
+ * FR-PAY-4: this reports what the SERVER knows, which is only ever what a
+ * verified webhook or a server-side status check established. A browser
+ * arriving back from the provider proves nothing and is never treated as
+ * proof.
+ */
+publicOrdersRouter.get(
+  '/api/orders/track/:token/payment',
+  publicApiLimiter,
+  handler(async (req, res) => {
+    const token = req.params.token;
+    if (typeof token !== 'string' || token.length < 16) throw new NotFoundError('We could not find that order.');
+
+    const { order, settledMinor, balanceDueMinor } = await getOrderByTrackingToken(token);
+    const pending = await findPendingMobileMoneyPayment(order.id);
+
+    res.set('Cache-Control', 'no-store');
+    res.json({
+      status: order.status,
+      settledMinor,
+      balanceDueMinor,
+      isPaid: balanceDueMinor <= 0,
+      pending: pending ? { ussdCode: pending.ussdCode, amountMinor: pending.amountMinor } : null,
     });
   }),
 );
