@@ -2,6 +2,8 @@ import { Router } from 'express';
 
 import { authRouter } from '@/routes/auth';
 import { healthRouter } from '@/routes/health';
+import { publicMenuRouter } from '@/routes/public/menu';
+import { staffMenuRouter } from '@/routes/staff/menu';
 import { staffUsersRouter } from '@/routes/staff/users';
 
 /**
@@ -14,4 +16,6 @@ export const routes: Router = Router();
 
 routes.use(healthRouter);
 routes.use(authRouter);
+routes.use(publicMenuRouter);
+routes.use(staffMenuRouter);
 routes.use(staffUsersRouter);
