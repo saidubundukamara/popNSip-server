@@ -1,0 +1,21 @@
+# dependencies
+/node_modules
+/.pnp
+.pnp.*
+
+# build output
+/dist
+*.tsbuildinfo
+
+# env files
+.env*
+!.env.example
+
+# logs
+*.log
+npm-debug.log*
+
+# misc
+.DS_Store
+*.pem
+/coverage
