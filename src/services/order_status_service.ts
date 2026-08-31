@@ -4,6 +4,7 @@ import type { OrderModel } from '@/generated/prisma/models';
 import { ForbiddenError, IllegalTransitionError, NotFoundError, ValidationError } from '@/lib/errors';
 import { logger } from '@/lib/logger';
 import { repositories as repos } from '@/repositories';
+import { emit } from '@/services/sse_service';
 import type { TxClient } from '@/repositories/base.repository';
 
 /**
@@ -207,11 +208,22 @@ export async function transition(input: {
   });
 
   // ── after commit ──
-  // Phase 5 attaches sse_service here; Phase 7 attaches the WhatsApp queue.
-  logger.info(
-    { orderId, from: result.from, to, actorType: actor.type },
-    'Order status changed',
-  );
+  // The transaction has landed, so a subscriber that acts on this event will
+  // find the change already there. Emitting inside the transaction would
+  // announce a write that might still roll back.
+  emit(result.order.branchId, {
+    name: 'order.status_changed',
+    data: {
+      orderId,
+      reference: result.order.reference,
+      from: result.from,
+      to,
+      at: new Date().toISOString(),
+    },
+  });
+
+  // Phase 7 attaches the WhatsApp queue here.
+  logger.info({ orderId, from: result.from, to, actorType: actor.type }, 'Order status changed');
 
   return result;
 }
