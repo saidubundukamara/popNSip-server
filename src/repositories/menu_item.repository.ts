@@ -101,9 +101,25 @@ export class MenuItemRepository extends BaseRepository<PrismaClient['menuItem'],
   }
 
   /** Resolves an inbound WhatsApp cart line back to a menu item. */
-  findByRetailerIds(retailerIds: string[]) {
+  /**
+   * Resolve inbound catalog cart lines.
+   *
+   * A cart's `product_retailer_id` is not reliably the retailer id we set:
+   * WhatsApp sends Meta's own numeric product id for some lines and our cuid
+   * for others, and both arrive in the same field. Observed live — a cart of
+   * Sobo and Ginger Beer came through as 28444546298569197 and
+   * 27865572773113567, which are exactly those items' `whapiProductId`.
+   *
+   * Matching only one column silently drops the line, and the customer is told
+   * their drink is unavailable when it is sitting in stock. Both ids are ours
+   * and both are unique, so both are searched.
+   */
+  findByCatalogIds(catalogIds: string[]) {
     return this.delegate(this.db).findMany({
-      where: { productRetailerId: { in: retailerIds }, archivedAt: null },
+      where: {
+        archivedAt: null,
+        OR: [{ productRetailerId: { in: catalogIds } }, { whapiProductId: { in: catalogIds } }],
+      },
     });
   }
 

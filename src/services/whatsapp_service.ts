@@ -1,5 +1,6 @@
+import { env } from '@/config/env';
 import { logger } from '@/lib/logger';
-import { HANDED_TO_HUMAN, HELP_TEXT, buttonMessage, greeting } from '@/lib/whapi_templates';
+import { HANDED_TO_HUMAN, HELP_TEXT, buttonMessage, catalogLink, greeting } from '@/lib/whapi_templates';
 import type { WhapiWebhookBody } from '@/lib/whapi_types';
 import {
   extractSelection,
@@ -204,7 +205,15 @@ async function handleGlobalCommand(
 }
 
 async function welcome(context: BotContext): Promise<void> {
-  updateSession({ intent: 'start', step: null });
+  // Starting over means starting over. Without this, an order abandoned
+  // half-configured survives the greeting, and the next cart merges into it —
+  // send a bottle of water after walking away from a jollof rice, and the bot
+  // answers "Which size of Jollof Rice?", which is baffling and looks like it
+  // ignored what you just sent.
+  //
+  // The 30-minute session expiry does not cover this: the customer is back
+  // within the window, deliberately restarting, and saying so.
+  updateSession({ intent: 'start', step: null, metadata: { lines: [], asking: undefined } });
 
   const customer = await repos.customers.findByPhone(context.phoneE164);
 
@@ -212,7 +221,20 @@ async function welcome(context: BotContext): Promise<void> {
     context,
     buttonMessage({
       phoneE164: context.phoneE164,
-      body: `${greeting(context.branch.name, customer?.name)}\n\nSend me a cart from our catalogue, or browse here.`,
+      // WHAPI_NUMBER is optional outside production, and a deployment without
+      // one must not offer a link to wa.me/c/undefined.
+      body: [
+        greeting(context.branch.name, customer?.name),
+        '',
+        ...(env.WHAPI_NUMBER
+          ? [
+              'Tap to see the menu with pictures, add what you want, and send the cart back to me:',
+              catalogLink(env.WHAPI_NUMBER),
+              '',
+              'Or use the buttons below.',
+            ]
+          : ['Send me a cart from our catalogue, or browse here.']),
+      ].join('\n'),
       buttons: [
         { id: 'browse', title: 'Browse the menu' },
         { id: 'help', title: 'Help' },

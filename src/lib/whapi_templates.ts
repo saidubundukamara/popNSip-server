@@ -87,6 +87,22 @@ export const rowsFrom = <T extends { id: string; name: string }>(
 
 // ─── copy ─────────────────────────────────────────────────────────────────
 
+/**
+ * A deep link straight into the business's WhatsApp catalog. Tapping it opens
+ * the product grid inside WhatsApp, which is the path this bot is built around
+ * — the customer picks with pictures and sends a cart back, rather than
+ * reading a list of names.
+ *
+ * It lives in the message body rather than on a button because WhatsApp will
+ * not mix a URL button with quick replies in one interactive message; putting
+ * it here keeps "Browse the menu" and "Help" and still renders as a tap.
+ *
+ * Derived from the configured business number, so it follows the deployment
+ * instead of being pinned to one account.
+ */
+export const catalogLink = (businessE164: string): string =>
+  `https://wa.me/c/${toWhapiNumber(businessE164)}`;
+
 export const greeting = (branchName: string, customerName?: string | null): string =>
   customerName
     ? `Hello ${customerName.split(' ')[0]} — welcome back to ${branchName}.`

@@ -50,19 +50,43 @@ export async function handleCart(context: BotContext, data: SessionData): Promis
     return;
   }
 
-  const menuItems = await repos.menuItems.findByRetailerIds(retailerIds);
-  const byRetailerId = new Map(menuItems.map((item) => [item.productRetailerId ?? item.id, item]));
+  const menuItems = await repos.menuItems.findByCatalogIds(retailerIds);
+
+  // Indexed under every id the catalog might use to name this item.
+  const byCatalogId = new Map<string, (typeof menuItems)[number]>();
+  for (const item of menuItems) {
+    byCatalogId.set(item.id, item);
+    if (item.productRetailerId) byCatalogId.set(item.productRetailerId, item);
+    if (item.whapiProductId) byCatalogId.set(item.whapiProductId, item);
+  }
 
   const resolved: PendingLine[] = [];
   const dropped: string[] = [];
 
   for (const item of items) {
-    const menuItem = item.product_retailer_id ? byRetailerId.get(item.product_retailer_id) : undefined;
+    const menuItem = item.product_retailer_id ? byCatalogId.get(item.product_retailer_id) : undefined;
 
     // Unmappable and unavailable are the same story to the customer: it is not
     // coming. They are told by name either way.
-    if (!menuItem || !menuItem.isAvailable || menuItem.archivedAt) {
-      dropped.push(menuItem?.name ?? item.name ?? 'An item');
+    //
+    // They are emphatically NOT the same story to us. "Sold out" is the system
+    // working; "the catalog sent an id we have never seen" means the catalog
+    // and the database have drifted — a product created before a reseed, or
+    // one Meta has not approved yet, so WhatsApp sends the line without a
+    // retailer id. Both look identical in the chat, so the log is the only
+    // place the difference can live. The retailer id is our own menu item id,
+    // not customer data; the phone number and the cart preview stay out.
+    if (!menuItem) {
+      logger.warn(
+        { retailerId: item.product_retailer_id ?? null, name: item.name ?? null },
+        'Cart line did not map to a menu item',
+      );
+      dropped.push(item.name ?? 'An item');
+      continue;
+    }
+
+    if (!menuItem.isAvailable || menuItem.archivedAt) {
+      dropped.push(menuItem.name);
       continue;
     }
 
