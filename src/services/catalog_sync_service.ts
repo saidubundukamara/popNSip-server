@@ -21,13 +21,37 @@ import { repositories as repos } from '@/repositories';
 /** Sync is best-effort by design: a menu edit must never fail on a slow Whapi. */
 export type SyncOutcome = { itemId: string; ok: boolean; productId?: string; error?: string };
 
+/**
+ * Whapi validates `currency` against a fixed list that has SLL but not SLE.
+ * Sierra Leone redenominated in 2022 and 1 SLE is 1000 SLL, so sending the SLE
+ * code is rejected outright and sending the SLE *amount* under the SLL label
+ * would understate every price by a factor of a thousand.
+ *
+ * The amount is therefore converted along with the code. Le 50 goes out as
+ * 50000 SLL, which is the same money written the old way.
+ *
+ * This is display only — `pricing_service` is still the sole authority on what
+ * anyone is charged, and an inbound cart is always re-priced from the database
+ * (FR-WA). But a catalog that misquotes a price starts arguments at the
+ * counter, so it has to be right.
+ *
+ * Remove this the day Whapi accepts SLE.
+ */
+const WHAPI_CURRENCY: Record<string, { code: string; multiplier: number }> = {
+  SLE: { code: 'SLL', multiplier: 1000 },
+};
+
 function toProduct(item: MenuItemModel, currency: string): WhapiProductInput {
+  const mapped = WHAPI_CURRENCY[currency];
+
   return {
     name: item.name,
     // The one place minor units become a decimal.
-    price: toMajor(item.basePriceMinor),
-    currency,
-    ...(item.description ? { description: item.description } : {}),
+    price: toMajor(item.basePriceMinor) * (mapped?.multiplier ?? 1),
+    currency: mapped?.code ?? currency,
+    // Whapi rejects a product with no description, so the name stands in.
+    // Half the menu — sides and drinks — carries no description of its own.
+    description: item.description ?? item.name,
     ...(item.imageUrl ? { images: [item.imageUrl] } : {}),
     // Our own stable id. An inbound cart line resolves back through this.
     product_retailer_id: item.id,

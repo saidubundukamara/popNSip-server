@@ -119,3 +119,28 @@ export type WhapiBusinessProfile = {
   websites?: string[];
   hours?: unknown;
 };
+
+/**
+ * A Whapi error response. The outer `message` is frequently a restatement of
+ * the HTTP status; `details` is where Meta's own explanation arrives, and it
+ * is usually the only part that says what to actually do.
+ */
+export type WhapiErrorBody = {
+  error?: {
+    code?: number;
+    message?: string;
+    /**
+     * Two shapes in practice, so both are handled: a plain string for Whapi's
+     * own schema validation ("/body/currency must be equal to one of..."), and
+     * an object when the failure is forwarded from Meta.
+     */
+    details?:
+      | string
+      | {
+          message?: string;
+          description?: string;
+          meta_code?: number;
+          path?: string;
+        };
+  };
+};

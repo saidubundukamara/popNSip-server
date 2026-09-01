@@ -3,6 +3,7 @@ import { logger } from '@/lib/logger';
 import { toWhapiNumber } from '@/lib/phone';
 import type {
   WhapiBusinessProfile,
+  WhapiErrorBody,
   WhapiInteractivePayload,
   WhapiOrderDetails,
   WhapiProduct,
@@ -58,15 +59,28 @@ async function call<T>(
     const data: unknown = await response.json().catch(() => null);
 
     if (!response.ok) {
-      // The path is logged, never the body or the query: both carry customer
-      // phone numbers, and an order token is a bearer credential.
-      logger.warn({ status: response.status, path }, 'Whapi request failed');
+      const failure = (data as WhapiErrorBody | null)?.error;
+
+      // Whapi's own `message` is often a generic restatement of the status —
+      // "wrong request parameters" — while the sentence that says what is
+      // actually wrong sits in `details`, forwarded from Meta. Reporting only
+      // the outer message turns "no catalog is attached to this WhatsApp
+      // Business account" into something nobody can act on.
+      const details = failure?.details;
+      const detail =
+        typeof details === 'string' ? details : (details?.description ?? details?.message);
+      const message = failure?.message ?? `Whapi returned ${response.status}`;
+
+      // The path and the failure are logged; the request body and query never
+      // are, because both carry customer phone numbers and an order token is a
+      // bearer credential. A response's error details are the provider
+      // describing itself, so they are safe.
+      logger.warn({ status: response.status, path, whapi: failure }, 'Whapi request failed');
+
       return {
         ok: false,
         status: response.status,
-        error:
-          (data as { error?: { message?: string } } | null)?.error?.message ??
-          `Whapi returned ${response.status}`,
+        error: detail ? `${message}: ${detail}` : message,
       };
     }
 
