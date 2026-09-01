@@ -36,4 +36,39 @@ export class CustomerRepository extends BaseRepository<PrismaClient['customer'],
       take,
     });
   }
+
+  /** The customer list's default view: whoever was here most recently. */
+  recent(take = 50) {
+    return this.delegate(this.db).findMany({ orderBy: { updatedAt: 'desc' }, take });
+  }
+
+  /**
+   * Name or phone. The phone arm takes an already-normalised fragment, since
+   * the column holds E.164 and staff type a local number.
+   */
+  searchByNameOrPhone(term: string, phoneFragment?: string, take = 50) {
+    return this.delegate(this.db).findMany({
+      where: {
+        OR: [
+          { name: { contains: term, mode: 'insensitive' } },
+          { phoneE164: { contains: phoneFragment ?? term } },
+        ],
+      },
+      orderBy: { updatedAt: 'desc' },
+      take,
+    });
+  }
+
+  findByIdWithOrders(id: string, take = 20) {
+    return this.delegate(this.db).findUnique({
+      where: { id },
+      include: {
+        orders: {
+          orderBy: { placedAt: 'desc' },
+          take,
+          include: { items: { include: { modifiers: true } }, payments: true, table: true },
+        },
+      },
+    });
+  }
 }

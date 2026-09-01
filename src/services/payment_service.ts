@@ -267,3 +267,19 @@ export async function findMobileMoneyPayment(
     null
   );
 }
+
+/**
+ * The payments ledger. A read, deliberately separate from the settlement path
+ * above — nothing here may change an order's status, and only ActorType.SYSTEM
+ * ever settles one (FR-PAY-4).
+ */
+export function listPayments(args: {
+  branchId: string;
+  status?: PaymentStatus;
+  method?: PaymentMethod;
+  from?: Date;
+  to?: Date;
+  take?: number;
+}) {
+  return repos.payments.listForBranch({ ...args, take: args.take ?? 100 });
+}

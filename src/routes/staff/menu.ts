@@ -217,26 +217,11 @@ staffMenuRouter.patch(
   }),
 );
 
-staffMenuRouter.patch(
-  '/api/staff/menu/items/:id/availability',
-  handler(async (req, res) => {
-    const actor = actorOf(req);
-    const id = requiredParam(req.params.id, 'Item');
-    const { isAvailable } = parse(z.object({ isAvailable: z.boolean() }), req.body);
-    const { before, after } = await menu.setItemAvailability(id, isAvailable);
-
-    await audit({
-      actor,
-      action: 'menu.item_availability_changed',
-      targetType: 'MenuItem',
-      targetId: id,
-      before: { isAvailable: before.isAvailable },
-      after: { isAvailable: after.isAvailable },
-      requestId: req.id,
-    });
-    res.json({ item: after });
-  }),
-);
+/*
+ * Availability lives in `routes/staff/menu_availability.ts`, mounted ahead of
+ * this router so a cashier can mark an item sold out mid-service without a
+ * manager. Everything else here stays manager-and-above.
+ */
 
 staffMenuRouter.post(
   '/api/staff/menu/items/reorder',

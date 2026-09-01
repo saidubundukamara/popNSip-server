@@ -1,10 +1,10 @@
 import { Router } from 'express';
-import type { RequestHandler } from 'express';
 import { z } from 'zod';
 
 import { OrderStatus, OrderType, StaffRole } from '@/generated/prisma/enums';
-import { BadRequestError, NotFoundError } from '@/lib/errors';
+import { NotFoundError } from '@/lib/errors';
 import { phoneSearchFragment } from '@/lib/phone';
+import { actorOf, handler, requiredParam } from '@/lib/route';
 import { requireAuth, requireRole } from '@/middleware/auth';
 import { repositories as repos } from '@/repositories';
 import { audit } from '@/services/audit_service';
@@ -23,23 +23,6 @@ import { subscribe } from '@/services/sse_service';
  * destructive actions are manager-and-above.
  */
 export const staffOrdersRouter: Router = Router();
-
-const handler =
-  (fn: (req: Parameters<RequestHandler>[0], res: Parameters<RequestHandler>[1]) => Promise<void>): RequestHandler =>
-  (req, res, next) => {
-    fn(req, res).catch(next);
-  };
-
-const actorOf = (req: Parameters<RequestHandler>[0]) => {
-  const user = req.user;
-  if (!user) throw new BadRequestError('No session.');
-  return user;
-};
-
-const requiredParam = (value: string | string[] | undefined, label: string): string => {
-  if (typeof value !== 'string' || value.length === 0) throw new NotFoundError(`${label} not found.`);
-  return value;
-};
 
 const isManager = (role: StaffRole): boolean => role === StaffRole.MANAGER || role === StaffRole.OWNER;
 

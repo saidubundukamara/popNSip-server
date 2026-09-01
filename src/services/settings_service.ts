@@ -89,3 +89,64 @@ export async function getPublicSettings(at: Date = new Date()) {
     },
   };
 }
+
+/**
+ * The manager's view of the branch. Everything the public settings endpoint
+ * withholds, plus the switches that control the shop: the order types it
+ * accepts and the WhatsApp bot's kill switch.
+ */
+export async function getBranchSettings() {
+  const branch = await repos.branches.findFirst();
+  if (!branch) throw new NotFoundError('No branch is configured.');
+
+  return {
+    id: branch.id,
+    name: branch.name,
+    address: branch.address,
+    phoneE164: branch.phoneE164,
+    timezone: branch.timezone,
+    currency: branch.currency,
+    openingHours: branch.openingHours,
+    isOpenOverride: branch.isOpenOverride,
+    botEnabled: branch.botEnabled,
+    deliveryEnabled: branch.deliveryEnabled,
+    pickupEnabled: branch.pickupEnabled,
+    dineInEnabled: branch.dineInEnabled,
+    isOpenNow: isOpenAt(branch, new Date()),
+  };
+}
+
+/**
+ * `timezone` and `currency` are deliberately absent. Analytics buckets by the
+ * branch timezone in raw SQL and every stored amount is in the branch
+ * currency, so changing either would silently reinterpret history rather than
+ * change a setting.
+ */
+export type BranchSettingsPatch = Partial<
+  Pick<
+    BranchModel,
+    | 'name'
+    | 'address'
+    | 'phoneE164'
+    | 'isOpenOverride'
+    | 'botEnabled'
+    | 'deliveryEnabled'
+    | 'pickupEnabled'
+    | 'dineInEnabled'
+  >
+> & {
+  /**
+   * Prisma's update input for a Json column will not take `JsonValue` (it has
+   * to leave room for `JsonNullValueInput`), so the shape is stated here and
+   * the route's zod schema is what actually validates it.
+   */
+  openingHours?: Record<string, { open: string; close: string }[]>;
+};
+
+export async function updateBranchSettings(patch: BranchSettingsPatch) {
+  const branch = await repos.branches.findFirst();
+  if (!branch) throw new NotFoundError('No branch is configured.');
+
+  await repos.branches.update(branch.id, patch);
+  return getBranchSettings();
+}
