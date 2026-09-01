@@ -52,21 +52,28 @@ export const errorHandler: ErrorRequestHandler = (error, req, res, next) => {
 
   const appError = normalise(error);
   const log = req.log ?? console;
+  const serious = appError.statusCode >= 500 || !appError.isOperational;
 
   const context = {
-    err: error,
     statusCode: appError.statusCode,
     code: appError.code,
     method: req.method,
     path: req.path,
     details: appError.details,
+    // A stack is what tells you where an unexpected failure came from. On an
+    // operational 4xx it is ten frames of router internals that say nothing
+    // the code and path do not, and it buries the entries that matter.
+    ...(serious ? { err: error } : {}),
   };
 
-  if (appError.statusCode >= 500 || !appError.isOperational) {
-    log.error(context, appError.message);
-  } else {
-    log.warn(context, appError.message);
-  }
+  // 401 is an answer, not an incident. The dashboard shell asks "is anyone
+  // signed in?" on every render, and "no" is a legitimate reply — logging it
+  // as a warning means a signed-out visitor, a stale cookie or a crawler
+  // fills the log with warnings and a real auth problem hides among them.
+  // 403 stays a warning: that is somebody signed in reaching for something
+  // they are not allowed to have, which is worth seeing.
+  const level = serious ? 'error' : appError.statusCode === 401 ? 'info' : 'warn';
+  log[level](context, appError.message);
 
   res.status(appError.statusCode).json({
     error: {
