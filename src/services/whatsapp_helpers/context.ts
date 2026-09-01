@@ -29,6 +29,14 @@ export type SessionData = {
   /** Which line and group the last question was about, so the answer lands right. */
   asking?: { kind: 'variant' | 'group'; lineIndex: number; groupId?: string };
   browseCategoryId?: string;
+  /**
+   * How this order was built. A catalog cart is already a finished shopping
+   * trip — the customer picked from the grid and pressed send — so offering
+   * "Add more" is a button that does nothing they cannot do better by opening
+   * the catalog again. An order assembled through the chat has no such place
+   * to go back to, so there it earns its keep.
+   */
+  cartOrigin?: 'catalog' | 'conversation';
 };
 
 /**

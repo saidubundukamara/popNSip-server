@@ -52,7 +52,7 @@ export async function askNextOrReview(context: BotContext, lines: PendingLine[])
 
   if (!question) {
     updateSession({ intent: 'cart_review', step: null, metadata: { lines, asking: undefined } });
-    await showCartForReview(context, lines);
+    await showCartForReview(context, lines, 'conversation');
     return;
   }
 

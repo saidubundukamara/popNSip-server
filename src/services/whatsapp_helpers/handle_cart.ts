@@ -118,7 +118,11 @@ export async function handleCart(context: BotContext, data: SessionData): Promis
  * Pricing happens here rather than at ingestion because the cart only becomes
  * priceable once every required choice is answered.
  */
-export async function showCartForReview(context: BotContext, lines: PendingLine[]): Promise<void> {
+export async function showCartForReview(
+  context: BotContext,
+  lines: PendingLine[],
+  origin: 'catalog' | 'conversation' = 'catalog',
+): Promise<void> {
   try {
     const priced = await priceCart(context.branch.id, toCartLines(lines));
 
@@ -137,7 +141,7 @@ export async function showCartForReview(context: BotContext, lines: PendingLine[
       ),
     );
 
-    updateSession({ intent: 'cart_review', step: null, metadata: { lines } });
+    updateSession({ intent: 'cart_review', step: null, metadata: { lines, cartOrigin: origin } });
 
     await replyInteractive(
       context,
@@ -146,7 +150,7 @@ export async function showCartForReview(context: BotContext, lines: PendingLine[
         body: 'Shall we go ahead?',
         buttons: [
           { id: 'cart_confirm', title: 'Confirm' },
-          { id: 'cart_add_more', title: 'Add more' },
+          ...(origin === 'conversation' ? [{ id: 'cart_add_more', title: 'Add more' }] : []),
           { id: 'cart_cancel', title: 'Start over' },
         ],
       }),
@@ -160,6 +164,6 @@ export async function showCartForReview(context: BotContext, lines: PendingLine[
       context,
       'Something in your order is no longer available. Type *menu* and we will build it again.',
     );
-    updateSession({ intent: 'start', step: null, metadata: { lines: [] } });
+    updateSession({ intent: 'start', step: null, metadata: { lines: [], cartOrigin: undefined } });
   }
 }

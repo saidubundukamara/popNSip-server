@@ -120,6 +120,22 @@ async function route(context: BotContext, data: SessionData): Promise<void> {
     return;
   }
 
+  // ── the cart buttons answer for themselves ──
+  // WhatsApp lets a customer tap a button on any message still on their
+  // screen, not only the most recent one. Routing every selection by the
+  // current intent therefore breaks the moment they scroll: tap "Add more",
+  // land in browsing, then tap "Confirm" on the message above it, and the
+  // browse handler gets a word it does not know and asks what you are in the
+  // mood for — indistinguishable from the tap being ignored.
+  //
+  // These three ids mean one thing each, whenever there is an order to act on,
+  // so they are honoured wherever they arrive from.
+  const cartActions = ['cart_confirm', 'cart_add_more', 'cart_cancel'];
+  if (context.selection && cartActions.includes(context.selection) && (data.lines?.length ?? 0) > 0) {
+    await handleCartReview(context, data);
+    return;
+  }
+
   const intent = (context.conversation.intent ?? 'start') as BotIntent;
 
   switch (intent) {
@@ -174,7 +190,7 @@ async function handleCartReview(context: BotContext, data: SessionData): Promise
     default:
       // Anything else at this step: show them where they are rather than
       // repeating a question they may not have seen.
-      await showCartForReview(context, data.lines ?? []);
+      await showCartForReview(context, data.lines ?? [], data.cartOrigin ?? 'catalog');
   }
 }
 
