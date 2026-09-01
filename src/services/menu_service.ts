@@ -126,6 +126,24 @@ export async function updateItem(id: string, input: Partial<MenuItemInput>) {
 }
 
 /** FR-MENU-5. Separated from updateItem because it is the one-tap action. */
+/**
+ * The sold-out board a cashier sees: every live item with just enough to
+ * recognise and toggle it. Deliberately not the managed menu — that carries
+ * prices, costs and archived rows, none of which belong on a counter screen,
+ * and it is manager-only for exactly that reason.
+ */
+export async function getAvailabilityBoard(branchId: string) {
+  const categories = await repos.menuItems.findManagedMenu(branchId);
+
+  return categories.map((category) => ({
+    id: category.id,
+    name: category.name,
+    items: category.items
+      .filter((item) => item.archivedAt === null)
+      .map((item) => ({ id: item.id, name: item.name, isAvailable: item.isAvailable })),
+  }));
+}
+
 export async function setItemAvailability(id: string, isAvailable: boolean) {
   const before = await repos.menuItems.findById(id);
   if (!before) throw new NotFoundError('Item not found.');

@@ -21,6 +21,15 @@ import * as menu from '@/services/menu_service';
  */
 export const staffMenuAvailabilityRouter: Router = Router();
 
+staffMenuAvailabilityRouter.get(
+  '/api/staff/menu/availability',
+  requireAuth,
+  handler(async (req, res) => {
+    const actor = actorOf(req);
+    res.json({ categories: await menu.getAvailabilityBoard(actor.branchId) });
+  }),
+);
+
 staffMenuAvailabilityRouter.patch(
   '/api/staff/menu/items/:id/availability',
   requireAuth,
