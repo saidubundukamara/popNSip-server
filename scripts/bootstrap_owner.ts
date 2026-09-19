@@ -19,9 +19,9 @@ import { normaliseSierraLeoneMobile } from '@/lib/phone';
  * printed once; change it from the dashboard after the first sign-in. That
  * keeps it out of shell history and CI logs of the command line.
  *
- * Run from a machine that can reach the database (Railway's *public* URL):
+ * Run from your machine against the production database (Neon's URL):
  *
- *   DATABASE_URL='<public url>' npm run bootstrap:owner -- \
+ *   DATABASE_URL='<neon url>' npm run bootstrap:owner -- \
  *     --email owner@example.com --name 'Full Name' \
  *     --branch 'popNsip Freetown' --address '12 Wilkinson Road, Freetown' \
  *     --phone '078 077127'
