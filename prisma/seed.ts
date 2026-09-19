@@ -6,9 +6,10 @@ import { StaffRole } from "@/generated/prisma/enums";
 
 /**
  * Development seed: one branch, three staff accounts across the role
- * hierarchy, six tables, and a menu with enough shape — variants, required
- * and optional modifier groups, an unavailable item — that later phases have
- * realistic data to work against.
+ * hierarchy, six tables, and popNsip's dessert-and-drinks menu (waffles, ice
+ * cream, coffee and matcha, shakes and slush) with enough shape — variants,
+ * required and optional modifier groups, an unavailable item — that every
+ * flow has realistic data to work against.
  *
  * Re-runnable: it clears the tables it owns first. It refuses to run against
  * production.
@@ -60,20 +61,26 @@ async function reset(): Promise<void> {
  * and the width baked in below is the width served.
  */
 const UNSPLASH: Record<string, string> = {
-  "Jollof Rice": "photo-1665332195309-9d75071138f0",
-  "Cassava Leaf (Plassas)": "photo-1763048443535-1243379234e2",
-  "Groundnut Stew": "photo-1667506997090-5e5ffc128711",
-  "Fried Rice": "photo-1603133872878-684f208fb84b",
-  "Grilled Chicken": "photo-1712579733874-c3a79f0f9d12",
-  "Grilled Fish": "photo-1600699899970-b1c9fadd8f9e",
-  "Beef Suya": "photo-1765584830134-12d879ad13bd",
-  "Fried Plantain": "photo-1540714605746-4f474eefc6d4",
-  "French Fries": "photo-1630384060421-cb20d0e0649d",
-  "Garden Salad": "photo-1771759441598-0105381b2e70",
-  "Extra Rice": "photo-1705147271933-5c7052f15a90",
+  "Classic Waffle": "photo-1562376552-0d160a2f238d",
+  "Strawberry Waffle": "photo-1653838049933-872d585b8d81",
+  "Chocolate Waffle": "photo-1721078917681-40f74d16d7b7",
+  "Waffle à la Mode": "photo-1562513872-634b8fae6dbe",
+  "Chicken & Waffle": "photo-1576894712323-995d7ff493b4",
+  "Ice Cream Cone": "photo-1497034825429-c343d7c6a68f",
+  "Ice Cream Cup": "photo-1562790879-dfde82829db0",
+  "Sundae": "photo-1597249536924-b226b1a1259d",
+  "Waffle Bowl Sundae": "photo-1724805053611-54c999f9c70c",
+  "Mocha": "photo-1529892485617-25f63cd7b1e9",
+  "Iced Mocha": "photo-1578314675249-a6910f80cc4e",
+  "Matcha Latte": "photo-1515823064-d6e0c04616a7",
+  "Iced Matcha": "photo-1749280447307-31a68eb38673",
+  "Milkshake": "photo-1553787499-6f9133860278",
+  "Oreo Shake": "photo-1572490122747-3968b75cc699",
+  "Slush": "photo-1762631178352-f7ae732b42c4",
+  "Strawberry Smoothie": "photo-1579954115545-a95591f28bfc",
+  "Fresh Lemonade": "photo-1623084921164-4a8c5c37a912",
+  "Bubble Tea": "photo-1558857563-b371033873b8",
   "Soft Drink": "photo-1594971475674-6a97f8fe8c2b",
-  "Ginger Beer": "photo-1610450622827-195cb7308af8",
-  "Sobo (Hibiscus)": "photo-1563636680-28d36aeb83a4",
   "Bottled Water": "photo-1523362628745-0c100150b504",
 };
 
@@ -144,134 +151,329 @@ async function main(): Promise<void> {
     })),
   });
 
-  // ── Rice dishes ───────────────────────────────────────────────────────────
-  const rice = await prisma.category.create({
-    data: { branchId: branch.id, name: "Rice Dishes", sortOrder: 0 },
+  // ── Waffles ───────────────────────────────────────────────────────────────
+  const waffles = await prisma.category.create({
+    data: { branchId: branch.id, name: "Waffles", sortOrder: 0 },
   });
 
-  const protein = (sortOrder: number) => ({
-    name: "Choose your protein",
+  const toppings = (sortOrder: number) => ({
+    name: "Toppings",
+    minSelect: 0,
+    maxSelect: 3,
+    sortOrder,
+    modifiers: {
+      create: [
+        { name: "Nutella", priceMinor: Le(15), sortOrder: 0 },
+        { name: "Fresh strawberries", priceMinor: Le(15), sortOrder: 1 },
+        { name: "Banana", priceMinor: Le(10), sortOrder: 2 },
+        { name: "Whipped cream", priceMinor: Le(10), sortOrder: 3 },
+        { name: "Scoop of vanilla ice cream", priceMinor: Le(20), sortOrder: 4 },
+      ],
+    },
+  });
+
+  const syrup = (sortOrder: number) => ({
+    name: "Syrup",
     minSelect: 1,
     maxSelect: 1,
     sortOrder,
     modifiers: {
       create: [
-        { name: "Grilled chicken", priceMinor: Le(25), sortOrder: 0 },
-        { name: "Beef", priceMinor: Le(30), sortOrder: 1 },
-        { name: "Fish", priceMinor: Le(35), sortOrder: 2 },
-        { name: "No protein", priceMinor: 0, sortOrder: 3 },
+        { name: "Maple syrup", priceMinor: 0, sortOrder: 0 },
+        { name: "Chocolate sauce", priceMinor: 0, sortOrder: 1 },
+        { name: "Caramel sauce", priceMinor: 0, sortOrder: 2 },
+        { name: "Honey", priceMinor: 0, sortOrder: 3 },
       ],
     },
   });
 
-  const extras = (sortOrder: number) => ({
+  await prisma.menuItem.create({
+    data: {
+      categoryId: waffles.id,
+      name: "Classic Waffle",
+      description: "Golden Belgian waffle, crisp outside and fluffy inside.",
+      basePriceMinor: Le(60),
+      sortOrder: 0,
+      imageUrl: photo("Classic Waffle"),
+      variants: {
+        create: [
+          { name: "Single", priceMinor: Le(60), sortOrder: 0 },
+          { name: "Double stack", priceMinor: Le(100), sortOrder: 1 },
+        ],
+      },
+      modifierGroups: { create: [syrup(0), toppings(1)] },
+    },
+  });
+
+  await prisma.menuItem.create({
+    data: {
+      categoryId: waffles.id,
+      name: "Strawberry Waffle",
+      description: "Fresh strawberries, whipped cream and a dusting of sugar.",
+      basePriceMinor: Le(85),
+      sortOrder: 1,
+      imageUrl: photo("Strawberry Waffle"),
+      modifierGroups: { create: [toppings(0)] },
+    },
+  });
+
+  await prisma.menuItem.create({
+    data: {
+      categoryId: waffles.id,
+      name: "Chocolate Waffle",
+      description: "Drenched in Nutella and chocolate sauce.",
+      basePriceMinor: Le(85),
+      sortOrder: 2,
+      imageUrl: photo("Chocolate Waffle"),
+      modifierGroups: { create: [toppings(0)] },
+    },
+  });
+
+  await prisma.menuItem.create({
+    data: {
+      categoryId: waffles.id,
+      name: "Waffle à la Mode",
+      description: "Warm waffle with a scoop of vanilla ice cream.",
+      basePriceMinor: Le(90),
+      sortOrder: 3,
+      imageUrl: photo("Waffle à la Mode"),
+      modifierGroups: { create: [syrup(0)] },
+    },
+  });
+
+  await prisma.menuItem.create({
+    data: {
+      categoryId: waffles.id,
+      name: "Chicken & Waffle",
+      description: "Crispy fried chicken on a waffle with hot honey.",
+      basePriceMinor: Le(120),
+      sortOrder: 4,
+      imageUrl: photo("Chicken & Waffle"),
+      // Deliberately out of stock, so availability handling has a real case.
+      isAvailable: false,
+    },
+  });
+
+  // ── Ice cream ─────────────────────────────────────────────────────────────
+  const iceCream = await prisma.category.create({
+    data: { branchId: branch.id, name: "Ice Cream", sortOrder: 1 },
+  });
+
+  const flavours = (sortOrder: number, maxSelect: number) => ({
+    name: "Flavours",
+    minSelect: 1,
+    maxSelect,
+    sortOrder,
+    modifiers: {
+      create: [
+        { name: "Vanilla", priceMinor: 0, sortOrder: 0 },
+        { name: "Chocolate", priceMinor: 0, sortOrder: 1 },
+        { name: "Strawberry", priceMinor: 0, sortOrder: 2 },
+        { name: "Cookies & cream", priceMinor: 0, sortOrder: 3 },
+        { name: "Mango", priceMinor: 0, sortOrder: 4 },
+      ],
+    },
+  });
+
+  const sprinkles = (sortOrder: number) => ({
     name: "Extras",
     minSelect: 0,
     maxSelect: 3,
     sortOrder,
     modifiers: {
       create: [
-        { name: "Fried plantain", priceMinor: Le(15), sortOrder: 0 },
-        { name: "Boiled egg", priceMinor: Le(10), sortOrder: 1 },
-        { name: "Garden salad", priceMinor: Le(15), sortOrder: 2 },
-        { name: "Extra pepper sauce", priceMinor: Le(5), sortOrder: 3 },
+        { name: "Sprinkles", priceMinor: Le(5), sortOrder: 0 },
+        { name: "Chocolate sauce", priceMinor: Le(5), sortOrder: 1 },
+        { name: "Oreo crumbs", priceMinor: Le(10), sortOrder: 2 },
       ],
     },
   });
 
   await prisma.menuItem.create({
     data: {
-      categoryId: rice.id,
-      name: "Jollof Rice",
-      description: "Smoky party jollof cooked in pepper and tomato stew.",
-      basePriceMinor: Le(50),
+      categoryId: iceCream.id,
+      name: "Ice Cream Cone",
+      description: "Soft scoops in a crunchy waffle cone.",
+      basePriceMinor: Le(35),
       sortOrder: 0,
-      imageUrl: photo("Jollof Rice"),
+      imageUrl: photo("Ice Cream Cone"),
       variants: {
         create: [
-          { name: "Regular", priceMinor: Le(50), sortOrder: 0 },
-          { name: "Large", priceMinor: Le(75), sortOrder: 1 },
+          { name: "One scoop", priceMinor: Le(35), sortOrder: 0 },
+          { name: "Two scoops", priceMinor: Le(55), sortOrder: 1 },
         ],
       },
-      modifierGroups: { create: [protein(0), extras(1)] },
+      modifierGroups: { create: [flavours(0, 2), sprinkles(1)] },
     },
   });
 
   await prisma.menuItem.create({
     data: {
-      categoryId: rice.id,
-      name: "Cassava Leaf (Plassas)",
-      description:
-        "Slow-cooked cassava leaf in palm oil, served with white rice.",
-      basePriceMinor: Le(55),
+      categoryId: iceCream.id,
+      name: "Ice Cream Cup",
+      description: "Scoops in a cup, for the walk home.",
+      basePriceMinor: Le(35),
       sortOrder: 1,
-      imageUrl: photo("Cassava Leaf (Plassas)"),
+      imageUrl: photo("Ice Cream Cup"),
       variants: {
         create: [
-          { name: "Regular", priceMinor: Le(55), sortOrder: 0 },
-          { name: "Large", priceMinor: Le(80), sortOrder: 1 },
+          { name: "One scoop", priceMinor: Le(35), sortOrder: 0 },
+          { name: "Two scoops", priceMinor: Le(55), sortOrder: 1 },
+          { name: "Three scoops", priceMinor: Le(75), sortOrder: 2 },
         ],
       },
-      modifierGroups: { create: [protein(0), extras(1)] },
+      modifierGroups: { create: [flavours(0, 3), sprinkles(1)] },
     },
   });
 
   await prisma.menuItem.create({
     data: {
-      categoryId: rice.id,
-      name: "Groundnut Stew",
-      description: "Peanut stew with rice.",
-      basePriceMinor: Le(55),
+      categoryId: iceCream.id,
+      name: "Sundae",
+      description: "Vanilla scoops, berry sauce and a cherry on top.",
+      basePriceMinor: Le(70),
       sortOrder: 2,
-      imageUrl: photo("Groundnut Stew"),
-      modifierGroups: { create: [protein(0)] },
+      imageUrl: photo("Sundae"),
+      modifierGroups: { create: [sprinkles(0)] },
     },
   });
 
   await prisma.menuItem.create({
     data: {
-      categoryId: rice.id,
-      name: "Fried Rice",
-      description: "Wok-fried rice with mixed vegetables.",
-      basePriceMinor: Le(60),
+      categoryId: iceCream.id,
+      name: "Waffle Bowl Sundae",
+      description: "Three scoops in a waffle bowl with wafers and sauce.",
+      basePriceMinor: Le(95),
       sortOrder: 3,
-      imageUrl: photo("Fried Rice"),
-      modifierGroups: { create: [protein(0), extras(1)] },
+      imageUrl: photo("Waffle Bowl Sundae"),
+      modifierGroups: { create: [flavours(0, 3), sprinkles(1)] },
     },
   });
 
-  // ── Grills ────────────────────────────────────────────────────────────────
-  const grills = await prisma.category.create({
-    data: { branchId: branch.id, name: "Grills", sortOrder: 1 },
+  // ── Coffee & matcha ───────────────────────────────────────────────────────
+  const coffee = await prisma.category.create({
+    data: { branchId: branch.id, name: "Coffee & Matcha", sortOrder: 2 },
+  });
+
+  const cupSizes = (regular: number, large: number) => ({
+    create: [
+      { name: "Regular", priceMinor: Le(regular), sortOrder: 0 },
+      { name: "Large", priceMinor: Le(large), sortOrder: 1 },
+    ],
+  });
+
+  const milk = (sortOrder: number) => ({
+    name: "Milk",
+    minSelect: 1,
+    maxSelect: 1,
+    sortOrder,
+    modifiers: {
+      create: [
+        { name: "Whole milk", priceMinor: 0, sortOrder: 0 },
+        { name: "Oat milk", priceMinor: Le(10), sortOrder: 1 },
+        { name: "Almond milk", priceMinor: Le(10), sortOrder: 2 },
+      ],
+    },
+  });
+
+  const coffeeExtras = (sortOrder: number) => ({
+    name: "Extras",
+    minSelect: 0,
+    maxSelect: 3,
+    sortOrder,
+    modifiers: {
+      create: [
+        { name: "Extra shot", priceMinor: Le(10), sortOrder: 0 },
+        { name: "Whipped cream", priceMinor: Le(8), sortOrder: 1 },
+        { name: "Vanilla syrup", priceMinor: Le(8), sortOrder: 2 },
+        { name: "Caramel syrup", priceMinor: Le(8), sortOrder: 3 },
+      ],
+    },
   });
 
   await prisma.menuItem.create({
     data: {
-      categoryId: grills.id,
-      name: "Grilled Chicken",
-      description: "Charcoal-grilled, marinated overnight.",
-      basePriceMinor: Le(40),
+      categoryId: coffee.id,
+      name: "Mocha",
+      description: "Espresso, chocolate and steamed milk.",
+      basePriceMinor: Le(55),
       sortOrder: 0,
-      imageUrl: photo("Grilled Chicken"),
+      imageUrl: photo("Mocha"),
+      variants: cupSizes(55, 70),
+      modifierGroups: { create: [milk(0), coffeeExtras(1)] },
+    },
+  });
+
+  await prisma.menuItem.create({
+    data: {
+      categoryId: coffee.id,
+      name: "Iced Mocha",
+      description: "Mocha over ice, topped with cream.",
+      basePriceMinor: Le(60),
+      sortOrder: 1,
+      imageUrl: photo("Iced Mocha"),
+      variants: cupSizes(60, 75),
+      modifierGroups: { create: [milk(0), coffeeExtras(1)] },
+    },
+  });
+
+  await prisma.menuItem.create({
+    data: {
+      categoryId: coffee.id,
+      name: "Matcha Latte",
+      description: "Ceremonial-grade matcha whisked into steamed milk.",
+      basePriceMinor: Le(60),
+      sortOrder: 2,
+      imageUrl: photo("Matcha Latte"),
+      variants: cupSizes(60, 75),
+      modifierGroups: { create: [milk(0)] },
+    },
+  });
+
+  await prisma.menuItem.create({
+    data: {
+      categoryId: coffee.id,
+      name: "Iced Matcha",
+      description: "Layered matcha and cold milk over ice.",
+      basePriceMinor: Le(65),
+      sortOrder: 3,
+      imageUrl: photo("Iced Matcha"),
+      variants: cupSizes(65, 80),
+      modifierGroups: { create: [milk(0)] },
+    },
+  });
+
+  // ── Shakes & slush ────────────────────────────────────────────────────────
+  const shakes = await prisma.category.create({
+    data: { branchId: branch.id, name: "Shakes & Slush", sortOrder: 3 },
+  });
+
+  await prisma.menuItem.create({
+    data: {
+      categoryId: shakes.id,
+      name: "Milkshake",
+      description: "Thick, cold and blended to order.",
+      basePriceMinor: Le(55),
+      sortOrder: 0,
+      imageUrl: photo("Milkshake"),
       variants: {
         create: [
-          { name: "Quarter", priceMinor: Le(40), sortOrder: 0 },
-          { name: "Half", priceMinor: Le(70), sortOrder: 1 },
-          { name: "Whole", priceMinor: Le(130), sortOrder: 2 },
+          { name: "Vanilla", priceMinor: Le(55), sortOrder: 0 },
+          { name: "Chocolate", priceMinor: Le(55), sortOrder: 1 },
+          { name: "Strawberry", priceMinor: Le(55), sortOrder: 2 },
         ],
       },
       modifierGroups: {
         create: [
           {
-            name: "Sauce",
-            minSelect: 1,
+            name: "Extras",
+            minSelect: 0,
             maxSelect: 2,
             sortOrder: 0,
             modifiers: {
               create: [
-                { name: "Pepper sauce", priceMinor: 0, sortOrder: 0 },
-                { name: "Garlic sauce", priceMinor: Le(5), sortOrder: 1 },
-                { name: "Barbecue", priceMinor: Le(5), sortOrder: 2 },
+                { name: "Whipped cream", priceMinor: Le(8), sortOrder: 0 },
+                { name: "Extra scoop", priceMinor: Le(15), sortOrder: 1 },
               ],
             },
           },
@@ -282,16 +484,29 @@ async function main(): Promise<void> {
 
   await prisma.menuItem.create({
     data: {
-      categoryId: grills.id,
-      name: "Grilled Fish",
-      description: "Whole fish, grilled with onion and pepper.",
-      basePriceMinor: Le(90),
+      categoryId: shakes.id,
+      name: "Oreo Shake",
+      description: "Cookies-and-cream shake with chocolate drizzle.",
+      basePriceMinor: Le(65),
       sortOrder: 1,
-      imageUrl: photo("Grilled Fish"),
+      imageUrl: photo("Oreo Shake"),
+    },
+  });
+
+  await prisma.menuItem.create({
+    data: {
+      categoryId: shakes.id,
+      name: "Slush",
+      description: "Ice-cold and brightly coloured. Pick your flavour.",
+      basePriceMinor: Le(30),
+      sortOrder: 2,
+      imageUrl: photo("Slush"),
       variants: {
         create: [
-          { name: "Snapper", priceMinor: Le(90), sortOrder: 0 },
-          { name: "Barracuda", priceMinor: Le(110), sortOrder: 1 },
+          { name: "Blue raspberry", priceMinor: Le(30), sortOrder: 0 },
+          { name: "Strawberry", priceMinor: Le(30), sortOrder: 1 },
+          { name: "Green apple", priceMinor: Le(30), sortOrder: 2 },
+          { name: "Mango", priceMinor: Le(30), sortOrder: 3 },
         ],
       },
     },
@@ -299,58 +514,36 @@ async function main(): Promise<void> {
 
   await prisma.menuItem.create({
     data: {
-      categoryId: grills.id,
-      name: "Beef Suya",
-      description: "Spiced skewers with sliced onion.",
-      basePriceMinor: Le(45),
-      sortOrder: 2,
-      imageUrl: photo("Beef Suya"),
-      // Deliberately out of stock, so availability handling has a real case.
-      isAvailable: false,
+      categoryId: shakes.id,
+      name: "Strawberry Smoothie",
+      description: "Strawberry, banana and yoghurt.",
+      basePriceMinor: Le(50),
+      sortOrder: 3,
+      imageUrl: photo("Strawberry Smoothie"),
     },
-  });
-
-  // ── Sides ─────────────────────────────────────────────────────────────────
-  const sides = await prisma.category.create({
-    data: { branchId: branch.id, name: "Sides", sortOrder: 2 },
-  });
-
-  await prisma.menuItem.createMany({
-    data: [
-      {
-        categoryId: sides.id,
-        name: "Fried Plantain",
-        basePriceMinor: Le(20),
-        sortOrder: 0,
-        imageUrl: photo("Fried Plantain"),
-      },
-      {
-        categoryId: sides.id,
-        name: "French Fries",
-        basePriceMinor: Le(25),
-        sortOrder: 1,
-        imageUrl: photo("French Fries"),
-      },
-      {
-        categoryId: sides.id,
-        name: "Garden Salad",
-        basePriceMinor: Le(25),
-        sortOrder: 2,
-        imageUrl: photo("Garden Salad"),
-      },
-      {
-        categoryId: sides.id,
-        name: "Extra Rice",
-        basePriceMinor: Le(15),
-        sortOrder: 3,
-        imageUrl: photo("Extra Rice"),
-      },
-    ],
   });
 
   // ── Drinks ────────────────────────────────────────────────────────────────
   const drinks = await prisma.category.create({
-    data: { branchId: branch.id, name: "Drinks", sortOrder: 3 },
+    data: { branchId: branch.id, name: "Drinks", sortOrder: 4 },
+  });
+
+  await prisma.menuItem.create({
+    data: {
+      categoryId: drinks.id,
+      name: "Bubble Tea",
+      description: "Milk tea with chewy tapioca pearls.",
+      basePriceMinor: Le(55),
+      sortOrder: 0,
+      imageUrl: photo("Bubble Tea"),
+      variants: {
+        create: [
+          { name: "Classic milk tea", priceMinor: Le(55), sortOrder: 0 },
+          { name: "Brown sugar", priceMinor: Le(60), sortOrder: 1 },
+          { name: "Taro", priceMinor: Le(60), sortOrder: 2 },
+        ],
+      },
+    },
   });
 
   await prisma.menuItem.create({
@@ -358,7 +551,7 @@ async function main(): Promise<void> {
       categoryId: drinks.id,
       name: "Soft Drink",
       basePriceMinor: Le(12),
-      sortOrder: 0,
+      sortOrder: 2,
       imageUrl: photo("Soft Drink"),
       variants: {
         create: [
@@ -374,17 +567,11 @@ async function main(): Promise<void> {
     data: [
       {
         categoryId: drinks.id,
-        name: "Ginger Beer",
-        basePriceMinor: Le(18),
+        name: "Fresh Lemonade",
+        description: "Squeezed to order, lightly sweetened.",
+        basePriceMinor: Le(25),
         sortOrder: 1,
-        imageUrl: photo("Ginger Beer"),
-      },
-      {
-        categoryId: drinks.id,
-        name: "Sobo (Hibiscus)",
-        basePriceMinor: Le(15),
-        sortOrder: 2,
-        imageUrl: photo("Sobo (Hibiscus)"),
+        imageUrl: photo("Fresh Lemonade"),
       },
       {
         categoryId: drinks.id,

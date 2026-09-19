@@ -27,19 +27,19 @@ async function main(): Promise<void> {
   assert.ok(branch, 'no branch — run `npx prisma db seed` first');
 
   // ── read the menu the way pricing_service will ────────────────────────────
-  const jollof = await prisma.menuItem.findFirst({
-    where: { name: 'Jollof Rice' },
+  const mocha = await prisma.menuItem.findFirst({
+    where: { name: 'Mocha' },
     include: { variants: true, modifierGroups: { include: { modifiers: true } } },
   });
-  assert.ok(jollof, 'seed data missing Jollof Rice');
+  assert.ok(mocha, 'seed data missing Mocha');
 
-  const large = jollof.variants.find((v) => v.name === 'Large');
-  const chicken = jollof.modifierGroups.flatMap((g) => g.modifiers).find((m) => m.name === 'Grilled chicken');
-  assert.ok(large && chicken, 'seed data missing the expected variant/modifier');
+  const large = mocha.variants.find((v) => v.name === 'Large');
+  const extraShot = mocha.modifierGroups.flatMap((g) => g.modifiers).find((m) => m.name === 'Extra shot');
+  assert.ok(large && extraShot, 'seed data missing the expected variant/modifier');
 
   const quantity = 2;
   const unitPriceMinor = large.priceMinor;
-  const lineTotalMinor = (unitPriceMinor + chicken.priceMinor) * quantity;
+  const lineTotalMinor = (unitPriceMinor + extraShot.priceMinor) * quantity;
 
   const customer = await repos.customers.upsertByPhone(phoneE164, 'Round Trip');
 
@@ -59,15 +59,15 @@ async function main(): Promise<void> {
       items: {
         create: [
           {
-            menuItemId: jollof.id,
+            menuItemId: mocha.id,
             variantId: large.id,
-            itemNameSnapshot: jollof.name,
+            itemNameSnapshot: mocha.name,
             variantNameSnapshot: large.name,
             unitPriceMinor,
             quantity,
             lineTotalMinor,
             modifiers: {
-              create: [{ modifierId: chicken.id, nameSnapshot: chicken.name, priceMinor: chicken.priceMinor }],
+              create: [{ modifierId: extraShot.id, nameSnapshot: extraShot.name, priceMinor: extraShot.priceMinor }],
             },
           },
         ],
@@ -89,9 +89,9 @@ async function main(): Promise<void> {
   assert.equal(fetched.id, created.id);
   assert.equal(fetched.totalMinor, lineTotalMinor);
   assert.equal(fetched.items.length, 1);
-  assert.equal(fetched.items[0]?.itemNameSnapshot, 'Jollof Rice');
+  assert.equal(fetched.items[0]?.itemNameSnapshot, 'Mocha');
   assert.equal(fetched.items[0]?.variantNameSnapshot, 'Large');
-  assert.equal(fetched.items[0]?.modifiers[0]?.nameSnapshot, 'Grilled chicken');
+  assert.equal(fetched.items[0]?.modifiers[0]?.nameSnapshot, 'Extra shot');
 
   assert.ok(await repos.orders.findByReference(reference), 'order not found by reference');
   assert.ok(await repos.orders.findByIdempotencyKey(idempotencyKey), 'order not found by idempotency key');
