@@ -154,11 +154,50 @@ export async function notifyOrderStatus(order: {
     orderId: order.id,
     templateName: `order.${order.status.toLowerCase()}`,
   });
+
+  // Send now rather than at the next cron tick (up to five minutes away on
+  // Railway). Not awaited: the caller's transition must never wait on Whapi.
+  kickFlush();
 }
 
 // ─── the queue worker ─────────────────────────────────────────────────────
 
 export type FlushResult = { sent: number; failed: number; skipped: number };
+
+/**
+ * One flush at a time in this process. Reading the queue and marking a row
+ * SENT are not a claim, so two overlapping flushes would each send the same
+ * message. A request that arrives mid-flush runs once more afterwards, so a
+ * message queued during a flush is not left for the cron. This assumes one
+ * API replica; a second would need a row-level claim instead.
+ */
+let flushing: Promise<FlushResult> | null = null;
+let flushAgain = false;
+
+function serialisedFlush(): Promise<FlushResult> {
+  if (flushing) {
+    flushAgain = true;
+    return flushing;
+  }
+  flushing = flushQueue().finally(() => {
+    flushing = null;
+    if (flushAgain) {
+      flushAgain = false;
+      kickFlush();
+    }
+  });
+  return flushing;
+}
+
+/** Fire-and-forget flush for the post-commit path. Failures stay queued for the cron. */
+export function kickFlush(): void {
+  serialisedFlush().catch((error: unknown) => {
+    logger.error({ err: error }, 'WhatsApp queue flush failed');
+  });
+}
+
+/** The cron's entry point: shares the in-process guard with kickFlush. */
+export const flushQueueSerialised = (): Promise<FlushResult> => serialisedFlush();
 
 /**
  * Drain the queue (jobs/flush_wa_queue).

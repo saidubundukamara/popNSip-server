@@ -1,7 +1,8 @@
 import { defineConfig } from 'tsup';
 
 export default defineConfig({
-  entry: ['src/index.ts'],
+  // run_jobs is the Railway cron service's entry; see scripts/run_jobs.ts.
+  entry: { index: 'src/index.ts', run_jobs: 'scripts/run_jobs.ts' },
   outDir: 'dist',
   format: ['esm'],
   target: 'node20',

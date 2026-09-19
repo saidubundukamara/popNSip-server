@@ -34,6 +34,13 @@ const envSchema = z
     API_BASE_URL: z.url({ message: 'must be an absolute URL, e.g. http://localhost:4000' }),
     SESSION_SECRET: nonEmpty.min(32, 'must be at least 32 chars — `openssl rand -base64 32`'),
     LOG_LEVEL: z.enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace']).default('info'),
+    /**
+     * Proxies between the client and this process, used only in production.
+     * Railway's edge alone is 1. Behind the Vercel `/api/*` rewrite it is 2
+     * (Vercel, then Railway). Too low, and every customer shares Vercel's IP
+     * and so one rate-limit bucket.
+     */
+    TRUST_PROXY_HOPS: z.coerce.number().int().min(0).max(5).default(1),
 
     // ── monime (mobile money) ─────────────────────────────────────────────
     MONIME_BASE_URL: z.url().default('https://api.monime.io/v1'),

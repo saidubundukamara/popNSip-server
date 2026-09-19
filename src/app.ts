@@ -22,9 +22,10 @@ import { whapiWebhookRouter } from '@/routes/webhooks/whapi';
 export function createApp(): Express {
   const app = express();
 
-  // Behind a proxy in production: required for correct client IPs (rate
-  // limiting) and for `secure` session cookies to be set at all.
-  if (isProduction) app.set('trust proxy', 1);
+  // Behind proxies in production: required for correct client IPs (rate
+  // limiting) and for `secure` session cookies to be set at all. The hop count
+  // is the number of proxies in front, see TRUST_PROXY_HOPS.
+  if (isProduction) app.set('trust proxy', env.TRUST_PROXY_HOPS);
 
   app.use(requestId);
   app.use(helmet());
