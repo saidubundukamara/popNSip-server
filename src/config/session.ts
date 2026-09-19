@@ -5,6 +5,7 @@ import pg from 'pg';
 
 import { SESSION_COOKIE_NAME, SESSION_MAX_AGE_MS } from '@/config/constants';
 import { env, isProduction } from '@/config/env';
+import { logger } from '@/lib/logger';
 
 /**
  * Server-side sessions in Postgres (FR-AUTH-2): the cookie carries an opaque
@@ -17,6 +18,13 @@ import { env, isProduction } from '@/config/env';
 const PgStore = connectPgSimple(session);
 
 const pool = new pg.Pool({ connectionString: env.DATABASE_URL, max: 4 });
+
+// An idle client can be dropped from the server side (Neon suspending an idle
+// compute does exactly this). Unhandled, pg re-emits that as an 'error' event
+// and takes the process down; handled, the pool just replaces the client.
+pool.on('error', (error) => {
+  logger.warn({ err: error }, 'Session pool: idle client dropped');
+});
 
 export const sessionMiddleware: RequestHandler = session({
   name: SESSION_COOKIE_NAME,
